@@ -1,0 +1,141 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Casisang",
+                "id": "casisang"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            125.1000,
+                            8.1200
+                        ],
+                        [
+                            125.1300,
+                            8.1200
+                        ],
+                        [
+                            125.1300,
+                            8.1500
+                        ],
+                        [
+                            125.1000,
+                            8.1500
+                        ],
+                        [
+                            125.1000,
+                            8.1200
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Sumpong",
+                "id": "sumpong"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            125.1300,
+                            8.1400
+                        ],
+                        [
+                            125.1600,
+                            8.1400
+                        ],
+                        [
+                            125.1600,
+                            8.1700
+                        ],
+                        [
+                            125.1300,
+                            8.1700
+                        ],
+                        [
+                            125.1300,
+                            8.1400
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Poblacion",
+                "id": "poblacion"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            125.1150,
+                            8.1250
+                        ],
+                        [
+                            125.1450,
+                            8.1250
+                        ],
+                        [
+                            125.1450,
+                            8.1550
+                        ],
+                        [
+                            125.1150,
+                            8.1550
+                        ],
+                        [
+                            125.1150,
+                            8.1250
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Aglayan",
+                "id": "aglayan"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            125.1300,
+                            8.0800
+                        ],
+                        [
+                            125.1600,
+                            8.0800
+                        ],
+                        [
+                            125.1600,
+                            8.1100
+                        ],
+                        [
+                            125.1300,
+                            8.1100
+                        ],
+                        [
+                            125.1300,
+                            8.0800
+                        ]
+                    ]
+                ]
+            }
+        }
+    ]
+}

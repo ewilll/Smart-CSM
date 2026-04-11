@@ -1,0 +1,259 @@
+{
+    "MALAYBALAY_BARANGAYS": [
+        "Barangay 1",
+        "Barangay 2",
+        "Barangay 3",
+        "Barangay 4",
+        "Barangay 5",
+        "Barangay 6",
+        "Barangay 7",
+        "Barangay 8",
+        "Barangay 9",
+        "Barangay 10",
+        "Barangay 11",
+        "Aglayan",
+        "Apo Macote",
+        "Bangcud",
+        "Busdi",
+        "Cabangahan",
+        "Caburacanan",
+        "Can-ayan",
+        "Capitan Angel",
+        "Casisang",
+        "Dalwangan",
+        "Imbayao",
+        "Indulas",
+        "Kalaisan",
+        "Kalasungay",
+        "Kibalabag",
+        "Kulaman",
+        "Laguitas",
+        "Linabo",
+        "Magsaysay",
+        "Maligaya",
+        "Managok",
+        "Manaypan",
+        "Mapayag",
+        "Mapulo",
+        "Patpat",
+        "Saint Peter",
+        "San Jose",
+        "San Martin",
+        "Santo Niño",
+        "Silae",
+        "Simaya",
+        "Sinanglanan",
+        "Sumpong",
+        "Tigbasan",
+        "Zamboanguita"
+    ],
+    "HOTLINES": [
+        "(088) 813-2222",
+        "(0917) 123-4567"
+    ],
+    "OFFICE_HOURS": "8:00 AM - 5:00 PM (Monday to Friday)",
+    "RESPONSES": {
+        "report_leak": [
+            "🚨 **LEAK ALERT**: Oh no, a leak! 😱 Please shut off your main gate valve right away to save water! I'm flagging this for our emergency crew now. Maayong buhat! Please use the **'Report Incident'** tab to send us 📸 photos and your location.",
+            "💧 **URGENT**: I've got your report on the leak! Don't worry, we're on it! 🛠️ Please make sure your main valve is closed. You're doing a great job helping Malaybalay stay water-secure! 💙",
+            "🛠️ **ON THE CASE**: A leak? We'll fix that together! 🤝 Flagged for the crew. Please head over to 'Report Incident' so we can get the exact coordinates. Salamat kaayo! 💙"
+        ],
+        "check_bill": [
+            "📄 **BILLING**: Sure thing! You can check your latest balance and download your statement right here in the **'Bills'** section. 💳",
+            "💰 **ACCOUNT CHECK**: I've got you! Just head to the **'Bills'** tab to see your current balance. Maayong pag-monitor! 💙",
+            "💧 **WATER BILL**: Your latest statement is ready for viewing in the **'Bills'** dashboard. Keeping track is always a good idea! 📄"
+        ],
+        "payment_methods": [
+            "💳 **PAYMENT**: Paying is easy! 🚀 You can use GCash, PayMaya, online banking, or visit our office. Super convenient, right? 💙",
+            "📱 **GO DIGITAL**: We love digital! 🌐 Pay via GCash or PayMaya to skip the lines. Of course, you're always welcome at our main office too! 💙",
+            "💸 **EASY PAY**: Maayong adlaw! You can settle your bill through various online channels or directly at our Malaybalay office. 🏦"
+        ],
+        "new_connection": [
+            "📝 **NEW CONNECTION**: Excited to have you! 🎉 To get started, please bring your ID, Proof of Ownership, and Brgy Clearance to our office. We'll get you flowing in no time! 💧",
+            "🏠 **WELCOME TO THE FAMILY**: Applying for a new line? 📝 Just visit us with your requirements. We're here to help you get connected! 💙",
+            "💧 **JOIN US**: Ready for fresh water? 🚀 Drop by the office with your permits, and we'll start the application for your new meter. Maayong pag-apply! 💙"
+        ],
+        "no_supply": [
+            "💧 **SUPPLY ISSUE**: Oh, I'm so sorry about the interruption! 😔 Please check the 'System Status' or 'Notifications'—it might be scheduled maintenance for Malaybalay's pipes. Hang in there! 💙",
+            "⚠️ **WATER UPDATE**: No water? That's tough! 😟 I've checked and there might be work being done. Check the live alerts to see when it'll be back. We're working hard for you! 🛠️",
+            "❌ **INTERRUPTION**: I hear you! 👂 No water is never fun. Check our 'Advisories' for the latest schedule. Water will be back as soon as the repairs are done! 💙"
+        ],
+        "water_quality": [
+            "⚠️ **WATER QUALITY**: Yellowish water? 🧐 Sometimes that happens during repairs. Try flushing your taps for 3-5 minutes. If it stays murky, please report it as 'Contaminated' right away! 🛡️",
+            "🛡️ **SAFETY FIRST**: Discolored water can be concerning. 💧 Flush your pipes for a bit. If it's still not clear, I'm here to help you log a quality report. Stay safe! 💙",
+            "🧐 **QUALITY CHECK**: Unclear water? Let's be careful! ⚠️ Flush for a few minutes. If it doesn't clear up, please tell us via the 'Report Incident' tab. Maayong pag-amping! 💙"
+        ],
+        "contact_info": [
+            "📞 **TALK TO US**: We're all ears! 👂 Call us at (088) 813-2222 or shoot an email to support@primewater-smartcsm.com. We're here for you! 💙",
+            "🤝 **GET IN TOUCH**: Need a human? 🙋‍♂️ Our hotline is always ready. You can also reach us via email anytime! 💙",
+            "☎️ **HOTLINE**: Maayong adlaw! Reach our Malaybal team at (088) 813-2222. We love hearing from our community! 💙"
+        ],
+        "office_hours": [
+            "⏰ **OFFICE HOURS**: We're open from 8:00 AM to 5:00 PM (Mon-Fri). 🗓️ But don't worry, our technical hotline is 24/7! 🌃",
+            "🗓️ **BUSINESS TIME**: Come visit us between 8 AM and 5 PM on weekdays! 🏢 After hours? Our emergency crew is still on standby for you. 💙",
+            "⌚ **SCHEDULE**: We follow standard 8-5 office hours, Malaybalay time! ⏰ See you then! 💙"
+        ],
+        "emergency_tips": [
+            "🛡️ **STAY PREPARED**: Knowledge is power! 💪 1. Know your main valve's location. 2. Keep 3 days of water stored. Safety first, Malaybalay! 💙",
+            "🆘 **QUICK TIPS**: Emergency? 🚨 Turn off your main water switch immediately. Also, always keep a reserve of water for your family. Be smart, stay ready! 💙",
+            "💡 **PRO TIP**: Did you know? 🧐 Storing a bit of water can save the day during unexpected brownouts or repairs. Stay protected! 🛡️"
+        ],
+        "app_features": [
+            "🚀 I AM AQUA! Your digital water buddy! 🤖 I can help you report leaks with GPS, track your bills, and give you live updates on our Malaybalay water map. Isn't that cool? 😎",
+            "🌟 **SMART SUPPORT**: I'm not just a bot, I'm your Smart-CSM assistant! 📱 I can analyze photos of leaks, predict severity, and keep you updated on everything PrimeWater. 💙",
+            "🌈 **WHAT I DO**: From checking your balance 💰 to reporting high consumption 📈, I'm here to make your water life easier! Maayong pag-explore! 💙"
+        ],
+        "greeting": [
+            "👋 **MAAYONG ADLAW!** I'm Aqua, your lively water support. How's your day going? Need help with your bill or a leak? I'm here for you! 💙",
+            "🌟 **HELLO THERE!** It's a beautiful day in Malaybalay! ☀️ I'm Aqua. What can I do to make your life easier today? 💧",
+            "💙 **WELCOME!** Aqua here, ready to serve! 🤖 Whether you have a question or just want to say hi, I'm all ears! Kumusta ka? 👋"
+        ],
+        "disconnection_reconnection": [
+            "🔌 **DISCONNECTION**: Oh no, I'm sad to hear that. 😔 Usually, this happens after 2 months of arrears. Please pay your balance + reconnection fee at the office so we can get your water back! 💧",
+            "⚠️ **NOTICE**: Water cut off? 🧐 Let's fix that! Drop by our office to settle your bills. We want to see your water flowing again as soon as possible! 💙",
+            "🔧 **RECONNECT**: To get back online, please visit our Malaybalay branch. We'll help you resolve the balance quickly! Maayong pag-asikaso! 💙"
+        ],
+        "change_account_name": [
+            "🔄 **NAME TRANSFER**: Updating your records? 📝 Please bring your ID and Deed of Sale to our office. We'll update the name on your meter together! 🤝",
+            "📝 **RECORD UPDATE**: Changing names is easy! Just visit us with your documents. We'll handle the paperwork for you! 💙",
+            "🔄 **UPDATES**: Maayong adlaw! Visit our branch to officially change the account owner. We're here to assist! 💙"
+        ],
+        "senior_citizen_discount": [
+            "👵 **SENIOR DISCOUNT**: We love our elders! ❤️ Get 5% off if your usage is under 30 cu.m. Just apply at the office with your Senior Citizen ID! 👴",
+            "🌟 **SC PRIVILEGE**: Our Lolo and Lola deserve the best! 👵 Bring your ID to our office to activate your 5% discount. God bless! 🙏",
+            "👴 **GRATITUDE**: Helping our seniors is our priority. ❤️ Apply for your discount at our Malaybalay office. Stay healthy! 💙"
+        ],
+        "meter_issues": [
+            "⚙️ **METER TROUBLE**: Meter acting weird? 🧐 Don't worry! Report it through the app, and our technical team will check it out. Maayong pag-report! 🛠️",
+            "⚠️ **METER CHECK**: Broken or stolen? 😱 That's serious! Report it now so we can assist. Please don't try to fix it yourself—leave it to the pros! 🛠️",
+            "🛠️ **TECHNICAL**: Stalling meter? ⚙️ I've logged your concern. Our team in Malaybalay is ready to help! 💙"
+        ],
+        "illegal_connections": [
+            "🛑 **ILLEGAL TAPPING**: Let's keep Malaybalay fair! ⚖️ Report any illegal connections anonymously. It helps us keep the water prices down for everyone. Thank you for your honesty! 💙",
+            "⚖️ **FAIR PLAY**: Water theft affects everyone. 🛑 If you see something, say something! Your report is handled with 100% privacy. 🕵️‍♂️",
+            "🚫 **PROTECT OUR WATER**: Helping us catch illegal taps makes our service better for all! 🌟 Report them safely via the app. 💙"
+        ],
+        "high_consumption": [
+            "📈 **HIGH BILL**: Surprise high bill? 😱 Let's be detectives! 🕵️‍♀️ Check your toilets and faucets for hidden leaks. You can also request a re-reading if it seems wrong! 💙",
+            "🧐 **BILL ANALYSIS**: Higher than usual? 📈 Sometimes it's a hidden leak. We can help you investigate! Contact our admin if you need a meter check. 💙",
+            "📈 **CONSUMPTION**: Whoa, that's a lot of water! 💧 Double-check for any leaks in your home. We're here if you need a professional to take a look! 🛠️"
+        ],
+        "water_conservation": [
+            "🌱 **SAVE WATER**: Little drops make a big difference! 💧 Fix those leaks, use a bucket when washing, and cherish every drop for Malaybalay's future! 🌍",
+            "♻️ **BE A HERO**: Water is life! ❤️ Save it by turning off the tap while brushing. Mother Earth says thank you! 🌍💙",
+            "🌟 **GREEN TIPS**: Use rainwater for your plants! 🌻 It's better for the environment and your bill. Let's grow together! 🌱"
+        ],
+        "small_talk": [
+            "I'm Aqua, your AI! 🤖 I was born to serve the people of Malaybalay. I love water and helping you! 🌊💙",
+            "How am I? I'm feeling flow-tastic! 🌊 Thanks for asking! How are you doing today? 💙",
+            "I'm just a bundle of code, but I've got a big heart for Malaybalay! 🤖❤️ What's on your mind? 💙"
+        ],
+        "unknown": [
+            "Hmm, I'm still learning! 🤔 I want to give you the best answer, so if I can't help with this, please contact our **Admin** or a **PrimeWater Worker** directly. They're amazing! 💙",
+            "I'm not quite sure about that one yet... 🧐 But my human colleagues are! Reach out to an **Admin** for more details. 💙",
+            "Oops! 🙊 That's a bit too complex for me. I'd love to help, but maybe a **PrimeWater Admin** has the answer you need? 💙"
+        ],
+        "out_of_area": [
+            "📍 **LOCATION NOTICE**: Whoops! I noticed you're talking about a place outside of **Malaybalay City**. 🌏 PrimeWater Smart-CSM is currently focused on our 46 beautiful barangays. Please check your location or contact our main office! 💙",
+            "🚫 **OUT OF BOUNDS**: I'd love to help, but that location isn't in my Malaybalay map! 🗺️ We're exclusive to this city for now. Maayong pag-amping! 💙",
+            "📍 **GEO-NOTICE**: It looks like you're outside my service area! 🛸 Currently, I only serve Malaybalay's 46 barangays. Check with your local water district! 💙"
+        ],
+        "maintenance_inquiry": [
+            "🛠️ **MAINTENANCE**: I've checked the schedule! 🗓️ There might be ongoing repairs or maintenance in your area to improve our service. Keep an eye on our 'Advisories' for live updates! 💙",
+            "🔧 **SERVICE UPDATE**: Maayong adlaw! 🛠️ If you're experiencing issues, it could be part of our scheduled maintenance. We're working hard to keep the water flowing smoothly for everyone! 💧",
+            "🏗️ **REPAIRS**: We're always upgrading! 🚀 Check the 'System Status' map to see if there are active work zones near you. We'll be done as soon as possible! 💙"
+        ],
+        "bill_dispute": [
+            "⚖️ **BILL DISPUTE**: High bill or reading error? 😱 We're here to make it right! You can request a meter re-reading through our main office. Let's ensure your billing is 100% accurate! 💙",
+            "📈 **ADJUSTMENT**: If you think your bill is incorrect, don't worry! 🤝 Please visit our office or message an Admin here. We'll investigate the reading for you immediately. 🕵️‍♂️",
+            "🧐 **BILL REVIEW**: Not happy with the amount? 📈 Let's check it! Sometimes it's a simple reading mismatch. We're happy to verify your consumption for you! 💙"
+        ],
+        "document_requirements": [
+            "📄 **REQUIREMENTS**: For a new line, you'll generally need: 1. Valid ID 🪪, 2. Proof of Ownership 🏠, and 3. Barangay Clearance 📜. I can give you the full checklist if you'd like! 💙",
+            "📝 **CHECKLIST**: Maayong pag-apply! 🏁 To get a new meter, please prepare your ID, property documents, and a sketch of your location. We're excited to serve you! 💧",
+            "📜 **PAPERWORK**: Applying for a senior discount? 👵 Just bring your Senior Citizen ID to our office. For new connections, don't forget your building permit! 💙"
+        ],
+        "water_safety": [
+            "🛡️ **WATER SAFETY**: Quality is our priority! 🧪 Our water undergoes regular testing to meet safety standards. If you notice any issues, please let us know right away! 💙",
+            "💧 **POTABILITY**: Is it safe? Yes! 🌟 We carefully monitor chlorine levels to ensure your water is clean. During heavy rain, some turbidity is normal—just flush for a bit! 🛡️",
+            "🧪 **LAB TESTS**: Malaybalay water is tested daily! 🔬 We work hard behind the scenes so you can trust every drop. Stay hydrated and stay safe! 💙"
+        ],
+        "reach_admin": [
+            "🙋‍♂️ **REACHING OUT**: Need to talk to our team? We're here! 🤝 You can message an **Admin** directly via the **'Messages'** section or visit us at our Malaybalay office. Maayong pag-ubos! 💙",
+            "📞 **DIRECT CONTACT**: Reaching an Admin is easy! 🚀 Call our hotline at (088) 813-2222 or use the internal messaging system. We're ready to assist with any concerns! 💙",
+            "🤝 **HUMAN SUPPORT**: Want to speak with someone? 🙋‍♂️ Head over to the **'Help'** or **'Messages'** tab. Our PrimeWater staff in Malaybalay is always happy to help our residents! 💙"
+        ],
+        "unrelated_internet": [
+            "Hmm, it seems like you are asking about your internet or signal. 🌐 Please upload a Prime Water related problem instead! 💙",
+            "Are you having internet issues? 📡 I can only help with water problems. Please upload a Prime Water related problem so I can assist you better! 💧"
+        ],
+        "unrelated_electricity": [
+            "It looks like you're experiencing electricity or power issues. ⚡ Please upload a Prime Water related problem! 💧",
+            "Are you having a brownout? 🔌 Unfortunately, I only handle water services. Please upload a Prime Water related problem! 💙"
+        ],
+        "unrelated_garbage": [
+            "Are you asking about garbage collection? 🗑️ Please upload a Prime Water related problem instead! 💙",
+            "This seems to be about waste management. ♻️ Please upload a Prime Water related problem! 💧"
+        ],
+        "unrelated_road": [
+            "It looks like there's a problem with the road or traffic. 🚧 Please upload a Prime Water related problem instead! 💙",
+            "Are you reporting a road repair? 🛣️ I can only process water issues. Please upload a Prime Water related problem! 💧"
+        ],
+        "unrelated_general": [
+            "It seems you are asking about something unrelated to water. 🤔 Please upload a Prime Water related problem so I can assist you! 💙",
+            "I'm not exactly sure what that is, but it doesn't seem like a water issue. 🧐 Please upload a Prime Water related problem! 💧"
+        ]
+    },
+    "SUGGESTED_ACTIONS": {
+        "report_leak": [
+            "View Incident Map 📍",
+            "Check Repair Status 🛠️",
+            "Contact Hotline 📞"
+        ],
+        "check_bill": [
+            "Pay via GCash 📱",
+            "Download PDF Statement 📄",
+            "View Billing History 💰"
+        ],
+        "no_supply": [
+            "Check Advisories 📜",
+            "View System Map 🗺️",
+            "Report Supply Issue 💧"
+        ],
+        "new_connection": [
+            "Download Application Form 📄",
+            "View Requirements 📜",
+            "Office Location 🏦"
+        ],
+        "high_consumption": [
+            "Report Meter Issue ⚙️",
+            "Water Saving Tips 🌱",
+            "Request Re-reading 🧐"
+        ],
+        "maintenance_inquiry": [
+            "Check Status Map 📍",
+            "View Advisories 📜",
+            "Get Hotline 📞"
+        ],
+        "bill_dispute": [
+            "Message Admin 📩",
+            "Billing History 💰",
+            "View Requirements 📜"
+        ],
+        "water_safety": [
+            "Report Contamination ⚠️",
+            "Flush Tap Tutorial 🎥",
+            "Contact Lab 🧪"
+        ],
+        "reach_admin": [
+            "Message Admin 📩",
+            "Visit Office 🏦",
+            "Call Hotline 📞"
+        ],
+        "default": [
+            "Check Dashboard 🏠",
+            "Ask a Question 🤖",
+            "Contact Support 📞"
+        ]
+    }
+}
