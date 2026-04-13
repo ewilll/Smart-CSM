@@ -35,7 +35,11 @@ import {
     MessageSquare,
     Bot,
     Copy,
-    Download
+    Download,
+    ListChecks,
+    MapPin,
+    User,
+    Phone
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { SkeletonCard, SkeletonCircle, SkeletonText } from '../../components/SkeletonLoader';
@@ -44,10 +48,13 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { broadcastSmsToResidents } from '../../utils/smsService';
+import { sendIncidentStatusNotifications, sendBroadcastEmails, retryDeliveryLog } from '../../utils/notifyService';
 import { motion, AnimatePresence } from 'framer-motion';
 import AnimatedBackground from '../../components/AnimatedBackground';
 import { usePreferences } from '../../context/PreferencesContext';
 import { useTranslation } from '../../utils/translations';
+import ProfileManagementModal from '../../components/modals/ProfileManagementModal';
+import { compareIncidentsForWorkQueue } from '../../utils/incidentPriority';
 
 // Fix for default Leaflet icon not working with bundlers
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -61,6 +68,24 @@ let DefaultIcon = L.icon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
+
+/** Advisory targeting: empty selectedNames = all customers; otherwise match profile.barangay text. */
+function filterCustomersByBarangay(rows, selectedNames) {
+    if (!selectedNames?.length) return rows || [];
+    return (rows || []).filter((row) => {
+        const pb = (row.barangay || '').toLowerCase();
+        if (!pb.trim()) return false;
+        return selectedNames.some((sel) => {
+            const s = String(sel).toLowerCase();
+            return (
+                pb.includes(s) ||
+                pb.includes(`barangay ${s}`) ||
+                pb.includes(`brgy ${s}`) ||
+                pb.includes(`brgy. ${s}`)
+            );
+        });
+    });
+}
 
 export default function AdminDashboard() {
     // Sync with session already validated by AdminRoute — avoids a blank first paint (`return null` until useEffect).
@@ -124,12 +149,18 @@ export default function AdminDashboard() {
         content: '',
         type: 'Emergency',
         is_active: true,
-        send_sms: false // New SMS Flag
+        send_sms: false,
+        send_email: false,
+        target_barangays: [],
     });
     const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
+    const [advisoryBarangayNames, setAdvisoryBarangayNames] = useState([]);
 
     // --- GAP 4: Delivery Tracking State ---
     const [deliveryReport, setDeliveryReport] = useState(null);
+    const [deliveryLogs, setDeliveryLogs] = useState([]);
+    const [deliveryLogsLoading, setDeliveryLogsLoading] = useState(false);
+    const [retryingDeliveryId, setRetryingDeliveryId] = useState(null);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [incidentFilter, setIncidentFilter] = useState('Active'); // 'Active' | 'History'
@@ -142,7 +173,43 @@ export default function AdminDashboard() {
     const { t } = useTranslation(language);
     const PAGE_SIZE = 5;
 
+    useEffect(() => {
+        if (!isAnnouncementModalOpen) return;
+        fetch('/data/malaybalay-barangays.json')
+            .then((r) => r.json())
+            .then((geo) => {
+                const names = (geo?.features || [])
+                    .map((f) => f?.properties?.name)
+                    .filter(Boolean)
+                    .sort((a, b) => a.localeCompare(b));
+                setAdvisoryBarangayNames(names);
+            })
+            .catch(() => setAdvisoryBarangayNames([]));
+    }, [isAnnouncementModalOpen]);
 
+    useEffect(() => {
+        if (currentTab !== 'delivery' || !user) return undefined;
+        let cancelled = false;
+        (async () => {
+            setDeliveryLogsLoading(true);
+            const { data, error } = await supabase
+                .from('delivery_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(150);
+            if (cancelled) return;
+            if (error) {
+                console.warn('[delivery_logs]', error);
+                setDeliveryLogs([]);
+            } else {
+                setDeliveryLogs(data || []);
+            }
+            setDeliveryLogsLoading(false);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [currentTab, user]);
 
     const fetchBills = async () => {
         const { data, count } = await supabase
@@ -219,12 +286,11 @@ export default function AdminDashboard() {
         const channels = [
             supabase.channel('admin_incidents').on('postgres_changes', { event: '*', table: 'incidents' }, (payload) => {
                 if (payload.eventType === 'INSERT') {
-                    setIncidents(prev => [payload.new, ...prev].slice(0, (page + 1) * PAGE_SIZE));
                     addPulse('New Insight', `A new ${payload.new.type} reported in ${payload.new.location}`, 'incident');
                 } else if (payload.eventType === 'UPDATE') {
-                    setIncidents(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
                     addPulse('Update', `Incident status in ${payload.new.location} changed to ${payload.new.status}`, 'update');
                 }
+                fetchIncidents();
                 fetchAnalytics(); // Refresh charts on change
             }).subscribe(),
 
@@ -253,7 +319,7 @@ export default function AdminDashboard() {
         ];
 
         return () => channels.forEach(c => supabase.removeChannel(c));
-    }, [page, filterType]);
+    }, [page, filterType, incidentFilter]);
 
     const addPulse = (title, message, type) => {
         const id = Math.random().toString(36).substring(7);
@@ -323,40 +389,136 @@ export default function AdminDashboard() {
         if (count !== undefined) setStats(prev => ({ ...prev, totalAdvisories: count }));
     };
 
+    const refreshDeliveryLogs = async () => {
+        const { data, error } = await supabase
+            .from('delivery_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(150);
+        if (error) {
+            console.warn('[delivery_logs]', error);
+            return;
+        }
+        setDeliveryLogs(data || []);
+    };
+
+    const handleRetryDelivery = async (logId) => {
+        setRetryingDeliveryId(logId);
+        try {
+            const res = await retryDeliveryLog(logId);
+            const errMsg =
+                typeof res.detail === 'string'
+                    ? res.detail
+                    : Array.isArray(res.detail)
+                      ? res.detail.map((d) => d?.msg || d).join('; ')
+                      : res.error || res.message || 'Retry failed';
+            if (!res.ok) {
+                setNotification({ type: 'error', message: errMsg });
+            } else {
+                setNotification({ type: 'success', message: t('delivery_logs_retry_ok') });
+                await refreshDeliveryLogs();
+            }
+        } catch (err) {
+            setNotification({ type: 'error', message: err?.message || 'Retry failed' });
+        } finally {
+            setRetryingDeliveryId(null);
+            setTimeout(() => setNotification(null), 4000);
+        }
+    };
+
     const handleCreateAnnouncement = async (e) => {
         e.preventDefault();
         try {
-            // Destructure send_sms out before saving to DB unless your DB supports it
-            const { send_sms, ...dbPayload } = announcementForm;
+            const { send_sms, send_email, target_barangays, ...dbPayload } = announcementForm;
 
-            const { error } = await supabase
+            const batchId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `adv-${Date.now()}`;
+
+            const { data: insertedAnnouncement, error } = await supabase
                 .from('announcements')
-                .insert([dbPayload]);
+                .insert([dbPayload])
+                .select('id')
+                .single();
 
             if (error) throw error;
 
+            const announcementId = insertedAnnouncement?.id;
+
             let successMessage = 'Announcement published successfully!';
 
-            // Trigger SMS Broadcast if checked
-            if (send_sms) {
-                setNotification({ type: 'success', message: 'Publishing and sending SMS broadcast...' });
-                const smsResult = await broadcastSmsToResidents(dbPayload, users);
+            const { data: rawRecipients } = await supabase
+                .from('profiles')
+                .select('id, role, phone, email, barangay, full_name')
+                .eq('role', 'customer');
 
-                // GAP 4: Set Delivery Report for tracking Modal
+            const targeted = filterCustomersByBarangay(rawRecipients, target_barangays);
+            const withPhone = targeted.filter((u) => u.phone && String(u.phone).trim().length >= 8);
+            const withEmail = targeted.filter((u) => u.email && String(u.email).includes('@'));
+
+            if (send_sms || send_email) {
+                setNotification({ type: 'success', message: 'Publishing and sending notifications...' });
+            }
+
+            let smsResult = null;
+            let emailResult = null;
+
+            const deliveryMeta = {
+                batchId,
+                contextType: 'broadcast_advisory',
+                contextId: announcementId,
+                createdBy: user?.id,
+            };
+
+            if (send_sms) {
+                smsResult = await broadcastSmsToResidents(dbPayload, withPhone, deliveryMeta);
+            }
+            if (send_email && withEmail.length > 0) {
+                const emailBody = `${dbPayload.title}\n\n${dbPayload.content}\n\n[${dbPayload.type}] — PrimeWater Malaybalay (Smart CSM)`;
+                emailResult = await sendBroadcastEmails({
+                    emails: withEmail.map((u) => u.email),
+                    subject: `[PrimeWater] ${dbPayload.type}: ${dbPayload.title}`,
+                    body: emailBody,
+                    batchId,
+                    contextType: 'broadcast_advisory',
+                    contextId: announcementId,
+                    createdBy: user?.id,
+                });
+            } else if (send_email && withEmail.length === 0) {
+                emailResult = { ok: true, successCount: 0, failedCount: 0, total: 0, skipped: true };
+            }
+
+            if (send_sms || send_email) {
                 setDeliveryReport({
                     announcement: dbPayload,
-                    successCount: smsResult.count,
-                    failedCount: smsResult.failedCount || 0,
-                    totalTarget: users.length,
-                    timestamp: new Date().toISOString()
+                    sms: send_sms
+                        ? {
+                              totalTarget: withPhone.length,
+                              successCount: smsResult?.count ?? 0,
+                              failedCount: smsResult?.failedCount ?? 0,
+                          }
+                        : null,
+                    email: send_email
+                        ? {
+                              totalTarget: withEmail.length,
+                              successCount: emailResult?.successCount ?? 0,
+                              failedCount: emailResult?.failedCount ?? 0,
+                          }
+                        : null,
+                    timestamp: new Date().toISOString(),
                 });
-
-                successMessage = `Alert published! Check Delivery Report.`;
+                successMessage = 'Alert published! See delivery report for SMS/email totals.';
             }
 
             setNotification({ type: 'success', message: successMessage });
             setIsAnnouncementModalOpen(false);
-            setAnnouncementForm({ title: '', content: '', type: 'Emergency', is_active: true, send_sms: false });
+            setAnnouncementForm({
+                title: '',
+                content: '',
+                type: 'Emergency',
+                is_active: true,
+                send_sms: false,
+                send_email: false,
+                target_barangays: [],
+            });
             fetchAnnouncements();
         } catch (err) {
             setNotification({ type: 'error', message: err.message });
@@ -381,35 +543,49 @@ export default function AdminDashboard() {
     const fetchIncidents = async () => {
         setLoading(true);
         try {
-            // 1. Fetch Paged Data for the table
-            const { count } = await supabase
-                .from('incidents')
-                .select('*', { count: 'exact', head: true });
+            const isHistory = incidentFilter === 'History';
 
-            const { data, error } = await supabase
-                .from('incidents')
-                .select('*')
-                .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-                .order('created_at', { ascending: false });
+            let countQuery = supabase.from('incidents').select('*', { count: 'exact', head: true });
+            let pageQuery = supabase.from('incidents').select('*');
+
+            if (isHistory) {
+                countQuery = countQuery.or('status.eq.Resolved,status.eq.Declined');
+                pageQuery = pageQuery
+                    .or('status.eq.Resolved,status.eq.Declined')
+                    .order('updated_at', { ascending: false })
+                    .order('created_at', { ascending: false });
+            } else {
+                countQuery = countQuery.neq('status', 'Resolved').neq('status', 'Declined');
+                pageQuery = pageQuery
+                    .neq('status', 'Resolved')
+                    .neq('status', 'Declined')
+                    .order('priority_score', { ascending: false })
+                    .order('created_at', { ascending: true });
+            }
+
+            const { count } = await countQuery;
+            const { data, error } = await pageQuery.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
             if (!error && data) {
                 setIncidents(data);
-                setStats(prev => ({ ...prev, total: count || 0 }));
+                setStats((prev) => ({ ...prev, total: count ?? prev.total }));
             }
 
-            // 2. Fetch Global Counts and Full Dataset for Analytics
-            const { data: fullData } = await supabase
-                .from('incidents')
-                .select('*');
+            const { data: fullData } = await supabase.from('incidents').select('*');
 
             if (fullData) {
                 setAllIncidents(fullData);
-                const pending = fullData.filter(i => i.status === 'Pending').length;
-                const inProgress = fullData.filter(i => ['In Progress', 'Dispatched', 'On-Site'].includes(i.status)).length;
-                const resolved = fullData.filter(i => i.status === 'Resolved').length;
-                setStats({ total: fullData.length, pending, inProgress, resolved });
+                const pending = fullData.filter((i) => i.status === 'Pending').length;
+                const inProgress = fullData.filter((i) => ['In Progress', 'Dispatched', 'On-Site'].includes(i.status)).length;
+                const resolved = fullData.filter((i) => i.status === 'Resolved').length;
+                setStats((prev) => ({
+                    ...prev,
+                    total: count ?? prev.total,
+                    pending,
+                    inProgress,
+                    resolved,
+                }));
             }
-
         } catch (err) {
             console.error('Error fetching incidents:', err);
         }
@@ -425,22 +601,48 @@ export default function AdminDashboard() {
             `WHO: ${incident.user_name || 'Anonymous Resident'} (Contact: ${incident.contact_number || 'N/A'})`;
     };
 
-    // --- GAP 1: Simulated SMS & Email Notifications ---
-    const sendSimulatedNotification = async (incident, newStatus) => {
-        console.log(`[Notification System] Triggering alert for Incident #${incident.id}`);
-        // Simulate network delay for API call
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        let message = `${t('primewater_update')}\n${t('ticket_id')}: ${incident.id || 'N/A'}\n${t('status_changed_to')}: ${t(newStatus.toLowerCase().replace(' ', '_')).toUpperCase()}`;
+    // Real SMS (httpSMS) + email (Gmail API) via FastAPI /notify — keys only on server (.env)
+    const sendIncidentOutboundNotifications = async (incident, newStatus) => {
+        let smsBody = `${t('primewater_update')}\n${t('ticket_id')}: ${incident.id || 'N/A'}\n${t('status_changed_to')}: ${t(newStatus.toLowerCase().replace(' ', '_')).toUpperCase()}`;
 
         if (newStatus === 'Dispatched') {
-            message += `\n${t('dispatch_note')}`;
+            smsBody += `\n${t('dispatch_note')}`;
         } else if (newStatus === 'Resolved') {
-            message += `\n${t('resolved_note')}`;
+            smsBody += `\n${t('resolved_note')}`;
         }
 
-        console.log(`[Simulated SMS/Email Sent to User ${incident.user_id}] \n${message}`);
-        // In a real app, this would call Twilio/SendGrid APIs using user.phone or user.email
+        const emailSubject = `PrimeWater Smart CSM — Report update (${String(incident.id || '').slice(0, 8)})`;
+        const emailBody = `${smsBody}\n\n— PrimeWater Malaybalay (Smart CSM)`;
+
+        let profilePhone = null;
+        let profileEmail = null;
+        if (incident.user_id) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('email, phone')
+                .eq('id', incident.user_id)
+                .maybeSingle();
+            profilePhone = profile?.phone || null;
+            profileEmail = profile?.email || null;
+        }
+
+        const phone = profilePhone || incident.contact_number || null;
+        const batchId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `st-${Date.now()}`;
+        const result = await sendIncidentStatusNotifications({
+            phone,
+            email: profileEmail,
+            smsBody,
+            emailSubject,
+            emailBody,
+            batchId,
+            contextType: 'incident_status',
+            contextId: incident.id,
+            createdBy: user?.id || null,
+        });
+        if (!result.ok) {
+            console.warn('[notify] incident-update partial or failed', result);
+        }
+        return result;
     };
 
     const updateStatus = async (status) => {
@@ -455,8 +657,7 @@ export default function AdminDashboard() {
             setIncidents(incidents.map(i => i.id === selectedIncident.id ? { ...i, status } : i));
             setSelectedIncident({ ...selectedIncident, status });
 
-            // Trigger Simulated SMS/Email Notification
-            await sendSimulatedNotification(selectedIncident, status);
+            await sendIncidentOutboundNotifications(selectedIncident, status);
 
             // Create Internal Notification for the resident
             await supabase.from('notifications').insert({
@@ -812,6 +1013,7 @@ export default function AdminDashboard() {
                                 { id: 'support', label: t('live_support'), icon: <MessageSquare size={16} />, color: 'emerald' },
                                 { id: 'bills', label: t('bills'), icon: <CreditCard size={16} />, color: 'amber' },
                                 { id: 'advisories', label: t('advisories'), icon: <Zap size={16} />, color: 'purple' },
+                                { id: 'delivery', label: t('delivery_tab'), icon: <ListChecks size={16} />, color: 'teal' },
                                 { id: 'system', label: t('system'), icon: <Settings size={16} />, color: 'slate' },
                             ].map((tab) => (
                                 <button
@@ -851,17 +1053,26 @@ export default function AdminDashboard() {
                             {
                                 currentTab === 'incidents' && (() => {
                                     const listToFilter = searchQuery ? allIncidents : incidents;
-                                    const filtered = listToFilter.filter(i => {
-                                        const matchesSearch = (i.type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                            (i.user_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                            (i.id || '').toString().includes(searchQuery);
+                                    const filtered = listToFilter
+                                        .filter((i) => {
+                                            const matchesSearch =
+                                                (i.type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                                (i.user_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                                (i.id || '').toString().includes(searchQuery);
 
-                                        if (incidentFilter === 'History') {
-                                            return matchesSearch && (i.status === 'Resolved' || i.status === 'Declined');
-                                        } else {
+                                            if (incidentFilter === 'History') {
+                                                return matchesSearch && (i.status === 'Resolved' || i.status === 'Declined');
+                                            }
                                             return matchesSearch && i.status !== 'Resolved' && i.status !== 'Declined';
-                                        }
-                                    });
+                                        })
+                                        .sort((a, b) => {
+                                            if (incidentFilter === 'History') {
+                                                const da = new Date(a.updated_at || a.created_at).getTime();
+                                                const db = new Date(b.updated_at || b.created_at).getTime();
+                                                return db - da;
+                                            }
+                                            return compareIncidentsForWorkQueue(a, b);
+                                        });
 
                                     // --- GAP 2: SLA Timer Logic ---
                                     const getSlaStatus = (incident) => {
@@ -871,11 +1082,10 @@ export default function AdminDashboard() {
                                         const now = new Date().getTime();
                                         const hoursElapsed = (now - reportedTime) / (1000 * 60 * 60);
 
-                                        // Base thresholds: Urgency 4-5 (1 hr), Urgency 3 (3 hrs), Urgency 1-2 (24 hrs)
-                                        const urgency = incident.priority_score || 1;
+                                        const p = Number(incident.priority_score ?? 5);
                                         let thresholdHour = 24;
-                                        if (urgency >= 4) thresholdHour = 1;
-                                        else if (urgency === 3) thresholdHour = 3;
+                                        if (p >= 9) thresholdHour = 1;
+                                        else if (p >= 6) thresholdHour = 3;
 
                                         if (hoursElapsed > thresholdHour) {
                                             return {
@@ -889,15 +1099,26 @@ export default function AdminDashboard() {
                                     return (
                                         <div className="space-y-4">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                                                {incidentFilter === 'Active' && (
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                                        {t('work_queue_sorted_hint')}
+                                                    </p>
+                                                )}
                                                 <div className="flex gap-2 bg-white/50 p-1.5 rounded-2xl border border-slate-100 shadow-sm">
                                                     <button
-                                                        onClick={() => setIncidentFilter('Active')}
+                                                        onClick={() => {
+                                                            setPage(0);
+                                                            setIncidentFilter('Active');
+                                                        }}
                                                         className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'Active' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
                                                     >
                                                         {t('active_queue')}
                                                     </button>
                                                     <button
-                                                        onClick={() => setIncidentFilter('History')}
+                                                        onClick={() => {
+                                                            setPage(0);
+                                                            setIncidentFilter('History');
+                                                        }}
                                                         className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'History' ? 'bg-slate-900 text-white shadow-lg shadow-slate-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
                                                     >
                                                         {t('incident_history')}
@@ -950,6 +1171,12 @@ export default function AdminDashboard() {
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-3">
+                                                                    <span
+                                                                        className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                                                        title={t('priority_score_label')}
+                                                                    >
+                                                                        P{Number(incident.priority_score ?? 5)}
+                                                                    </span>
                                                                     <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${sla.isBreached ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-slate-100'}`}>{incident.status}</span>
                                                                 </div>
                                                             </div>
@@ -1334,6 +1561,111 @@ export default function AdminDashboard() {
                                             pageSize={PAGE_SIZE}
                                             onPageChange={setAdvisoryPage}
                                         />
+                                    </div>
+                                )
+                            }
+
+                            {/* --- DELIVERY LOGS TAB --- */}
+                            {
+                                currentTab === 'delivery' && (
+                                    <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                                            <div>
+                                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">{t('delivery_tab')}</h3>
+                                                <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest max-w-2xl">
+                                                    {t('delivery_logs_hint')}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => refreshDeliveryLogs()}
+                                                className="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                                            >
+                                                {t('delivery_logs_refresh')}
+                                            </button>
+                                        </div>
+                                        {deliveryLogsLoading ? (
+                                            <p className="text-sm text-slate-500 py-12 text-center font-bold">{t('delivery_logs_loading')}</p>
+                                        ) : deliveryLogs.length === 0 ? (
+                                            <div className="text-center py-16 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                                <ListChecks className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                                                <p className="text-slate-500 font-bold text-sm">{t('delivery_logs_empty')}</p>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                                                <table className="w-full text-left text-xs">
+                                                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                        <tr>
+                                                            <th className="px-3 py-3">{t('delivery_logs_col_time')}</th>
+                                                            <th className="px-3 py-3">{t('delivery_logs_col_channel')}</th>
+                                                            <th className="px-3 py-3">{t('delivery_logs_col_context')}</th>
+                                                            <th className="px-3 py-3">{t('delivery_logs_col_recipient')}</th>
+                                                            <th className="px-3 py-3">{t('delivery_logs_col_status')}</th>
+                                                            <th className="px-3 py-3">{t('delivery_logs_col_attempts')}</th>
+                                                            <th className="px-3 py-3 min-w-[140px]">{t('delivery_logs_col_error')}</th>
+                                                            <th className="px-3 py-3">{t('delivery_logs_col_action')}</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {deliveryLogs.map((row) => {
+                                                            const attempts = row.attempt_count ?? 1;
+                                                            const maxA = row.max_attempts ?? 5;
+                                                            const canRetry =
+                                                                row.status === 'failed' && attempts < maxA;
+                                                            return (
+                                                                <tr key={row.id} className="hover:bg-slate-50/80">
+                                                                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                                                                        {row.created_at
+                                                                            ? new Date(row.created_at).toLocaleString()
+                                                                            : '—'}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5 font-bold uppercase text-slate-700">
+                                                                        {row.channel}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5 text-slate-600 max-w-[160px] truncate" title={`${row.context_type || ''} ${row.context_id || ''}`}>
+                                                                        {(row.context_type || '—') + (row.context_id ? ` · ${String(row.context_id).slice(0, 8)}…` : '')}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5 text-slate-700 max-w-[140px] truncate" title={row.recipient}>
+                                                                        {row.recipient}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5">
+                                                                        <span
+                                                                            className={`font-black uppercase text-[10px] px-2 py-1 rounded-lg ${
+                                                                                row.status === 'sent'
+                                                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                                                    : 'bg-rose-100 text-rose-700'
+                                                                            }`}
+                                                                        >
+                                                                            {row.status}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5 text-slate-600">
+                                                                        {attempts}/{maxA}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5 text-rose-600 max-w-[200px] break-words">
+                                                                        {row.failure_reason || '—'}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5">
+                                                                        {canRetry ? (
+                                                                            <button
+                                                                                type="button"
+                                                                                disabled={retryingDeliveryId === row.id}
+                                                                                onClick={() => handleRetryDelivery(row.id)}
+                                                                                className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                                                                            >
+                                                                                {retryingDeliveryId === row.id ? '…' : t('delivery_logs_retry')}
+                                                                            </button>
+                                                                        ) : (
+                                                                            <span className="text-slate-300">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
                                     </div>
                                 )
                             }
@@ -1898,14 +2230,6 @@ export default function AdminDashboard() {
                     )
                 }
 
-                {/* --- NEW: Profile Management Modal --- */}
-                <ProfileManagementModal
-                    isOpen={isProfileModalOpen}
-                    onClose={() => setIsProfileModalOpen(false)}
-                    user={user}
-                    onUpdate={handleUpdateProfile}
-                />
-
                 {/* Hidden Receipt Template for Printing */}
                 {
                     selectedBillForPrint && (
@@ -1919,7 +2243,7 @@ export default function AdminDashboard() {
                 {
                     isAnnouncementModalOpen && (
                         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
-                            <div className="bg-white rounded-[40px] p-10 max-w-lg w-full shadow-2xl relative animate-slide-up">
+                            <div className="bg-white rounded-[40px] p-10 max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl relative animate-slide-up">
                                 <button onClick={() => setIsAnnouncementModalOpen(false)} className="absolute top-8 right-8 p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-400" /></button>
 
                                 <div className="flex items-center gap-4 mb-8">
@@ -1973,6 +2297,43 @@ export default function AdminDashboard() {
                                         />
                                     </div>
 
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Target barangays (optional)</label>
+                                        <p className="text-[10px] font-bold text-slate-400 mb-2">Leave none selected to notify all customers. Otherwise only profiles whose barangay field matches a selected name receive SMS/email.</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAnnouncementForm({ ...announcementForm, target_barangays: [] })}
+                                            className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 hover:underline"
+                                        >
+                                            Clear — all barangays
+                                        </button>
+                                        <div className="max-h-36 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-2 space-y-1 custom-scrollbar">
+                                            {advisoryBarangayNames.length === 0 ? (
+                                                <p className="text-xs text-slate-400 px-2 py-4">Loading barangays…</p>
+                                            ) : (
+                                                advisoryBarangayNames.map((name) => (
+                                                    <label key={name} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={(announcementForm.target_barangays || []).includes(name)}
+                                                            onChange={() => {
+                                                                const cur = announcementForm.target_barangays || [];
+                                                                setAnnouncementForm({
+                                                                    ...announcementForm,
+                                                                    target_barangays: cur.includes(name)
+                                                                        ? cur.filter((x) => x !== name)
+                                                                        : [...cur, name],
+                                                                });
+                                                            }}
+                                                            className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                                                        />
+                                                        <span className="text-xs font-bold text-slate-700">{name}</span>
+                                                    </label>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+
                                     <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-100 rounded-2xl">
                                         <input
                                             type="checkbox"
@@ -1982,8 +2343,22 @@ export default function AdminDashboard() {
                                             className="w-5 h-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                                         />
                                         <div className="flex flex-col">
-                                            <label htmlFor="sendSmsOption" className="text-sm font-black text-rose-700 cursor-pointer">Mass SMS Broadcast</label>
-                                            <span className="text-[10px] text-rose-500 font-bold leading-tight">Send this alert directly to all registered resident phone numbers via Twilio.</span>
+                                            <label htmlFor="sendSmsOption" className="text-sm font-black text-rose-700 cursor-pointer">Mass SMS broadcast</label>
+                                            <span className="text-[10px] text-rose-500 font-bold leading-tight">Sends via httpSMS to selected residents (respects barangay filter above).</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                                        <input
+                                            type="checkbox"
+                                            id="sendEmailOption"
+                                            checked={announcementForm.send_email}
+                                            onChange={e => setAnnouncementForm({ ...announcementForm, send_email: e.target.checked })}
+                                            className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                        />
+                                        <div className="flex flex-col">
+                                            <label htmlFor="sendEmailOption" className="text-sm font-black text-indigo-800 cursor-pointer">Mass email broadcast</label>
+                                            <span className="text-[10px] text-indigo-600 font-bold leading-tight">Sends the same advisory by Gmail to residents with an email on file (respects barangay filter).</span>
                                         </div>
                                     </div>
 
@@ -2045,27 +2420,69 @@ export default function AdminDashboard() {
                                 <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">{t('broadcast_sent')}</h3>
                                 <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-8">{t('delivery_report_generated')}</p>
 
-                                <div className="bg-slate-50 rounded-2xl p-6 mb-8 text-left border border-slate-100">
-                                    <h4 className="font-bold text-slate-800 mb-4">{deliveryReport.announcement.title}</h4>
+                                <div className="bg-slate-50 rounded-2xl p-6 mb-8 text-left border border-slate-100 space-y-6">
+                                    <h4 className="font-bold text-slate-800">{deliveryReport.announcement.title}</h4>
 
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('total_targets')}</span>
-                                            <span className="font-black text-slate-800">{deliveryReport.totalTarget}</span>
+                                    {deliveryReport.sms && (
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">SMS (httpSMS)</p>
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between border-b border-slate-200 pb-1">
+                                                    <span className="text-slate-500">{t('total_targets')}</span>
+                                                    <span className="font-black text-slate-800">{deliveryReport.sms.totalTarget}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-200 pb-1">
+                                                    <span className="text-emerald-600 font-bold">{t('delivered')}</span>
+                                                    <span className="font-black text-emerald-600">{deliveryReport.sms.successCount}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-rose-600 font-bold">{t('failed')}</span>
+                                                    <span className="font-black text-rose-600">{deliveryReport.sms.failedCount}</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div> {t('delivered')}
-                                            </span>
-                                            <span className="font-black text-emerald-600">{deliveryReport.successCount}</span>
+                                    )}
+
+                                    {deliveryReport.email && (
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Email (Gmail)</p>
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between border-b border-slate-200 pb-1">
+                                                    <span className="text-slate-500">{t('total_targets')}</span>
+                                                    <span className="font-black text-slate-800">{deliveryReport.email.totalTarget}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-slate-200 pb-1">
+                                                    <span className="text-emerald-600 font-bold">{t('delivered')}</span>
+                                                    <span className="font-black text-emerald-600">{deliveryReport.email.successCount}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-rose-600 font-bold">{t('failed')}</span>
+                                                    <span className="font-black text-rose-600">{deliveryReport.email.failedCount}</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-rose-500"></div> {t('failed')}
-                                            </span>
-                                            <span className="font-black text-rose-600">{deliveryReport.failedCount}</span>
+                                    )}
+
+                                    {!deliveryReport.sms && !deliveryReport.email && (
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('total_targets')}</span>
+                                                <span className="font-black text-slate-800">{deliveryReport.totalTarget}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div> {t('delivered')}
+                                                </span>
+                                                <span className="font-black text-emerald-600">{deliveryReport.successCount}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-rose-500"></div> {t('failed')}
+                                                </span>
+                                                <span className="font-black text-rose-600">{deliveryReport.failedCount}</span>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
 
                                 <button

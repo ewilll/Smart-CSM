@@ -105,6 +105,11 @@ export default function UserDashboard() {
             return;
         }
         const currentUser = getCurrentUser();
+        // /dashboard is the resident app; admins belong on /admin (same Sidebar can highlight both)
+        if (currentUser?.role === 'admin') {
+            navigate('/admin', { replace: true });
+            return;
+        }
         setUser(currentUser);
         document.title = "Resident Dashboard | Smart CSM";
 

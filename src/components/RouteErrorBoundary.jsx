@@ -1,7 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
-export default class RouteErrorBoundary extends React.Component {
+class RouteErrorBoundaryInner extends React.Component {
   state = { error: null };
 
   static getDerivedStateFromError(error) {
@@ -10,6 +10,14 @@ export default class RouteErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Route render error:', error, info?.componentStack);
+  }
+
+  componentDidUpdate(prevProps) {
+    // Auto-recover the boundary after route changes so one broken page
+    // does not keep the whole app stuck on the fallback screen.
+    if (this.state.error && prevProps.locationKey !== this.props.locationKey) {
+      this.setState({ error: null });
+    }
   }
 
   render() {
@@ -28,4 +36,10 @@ export default class RouteErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+export default function RouteErrorBoundary(props) {
+  const location = useLocation();
+  const locationKey = `${location.pathname}${location.search}`;
+  return <RouteErrorBoundaryInner locationKey={locationKey} {...props} />;
 }

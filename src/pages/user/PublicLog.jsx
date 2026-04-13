@@ -52,7 +52,8 @@ export default function PublicLog() {
             // Fetch recent incidents, limit to 50 for performance, public transparency
             const { data, error } = await supabase
                 .from('incidents')
-                .select('id, type, location, status, created_at, severity, description')
+                .select('id, type, location, status, created_at, severity, description, priority_score')
+                .order('priority_score', { ascending: false })
                 .order('created_at', { ascending: false })
                 .limit(50);
 

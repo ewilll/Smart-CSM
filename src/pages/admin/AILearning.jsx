@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from '../../components/Sidebar';
 import {
     getUnclassifiedQueries,
@@ -44,23 +45,18 @@ const INTENTS = [
 ];
 
 export default function AILearning() {
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(() => getCurrentUser());
     const [queries, setQueries] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const [retraining, setRetraining] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [serverOffline, setServerOffline] = useState(false);
+    const [selectedIntents, setSelectedIntents] = useState({});
+    const [notification, setNotification] = useState(null);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        if (!isAuthenticated()) {
-            navigate('/login');
-            return;
-        }
-        setUser(getCurrentUser());
-        loadQueries();
-    }, [navigate]);
-
-    const loadQueries = async () => {
+    async function loadQueries() {
         setLoading(true);
         const data = await getUnclassifiedQueries();
         // If we got nothing and can't reach server, mark as offline
@@ -77,7 +73,15 @@ export default function AILearning() {
         }
         setQueries(data || []);
         setLoading(false);
-    };
+    }
+
+    useEffect(() => {
+        if (!isAuthenticated()) {
+            navigate('/login');
+            return;
+        }
+        loadQueries();
+    }, [navigate]);
 
     const handleTeach = async (text) => {
         const intent = selectedIntents[text];

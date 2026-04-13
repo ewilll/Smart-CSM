@@ -20,6 +20,8 @@ import { analyzeIncidentImage, classifyIncidentText, checkDuplicateIncident } fr
 import DashboardHeader from '../../components/common/DashboardHeader';
 import { useTranslation } from '../../utils/translations';
 import { usePreferences } from '../../context/PreferencesContext';
+import { sendIncidentAcknowledgment } from '../../utils/notifyService';
+import { computeIncidentPriorityScore } from '../../utils/incidentPriority';
 
 export default function ReportIncident() {
     const [user, setUser] = useState(null);
@@ -316,7 +318,16 @@ export default function ReportIncident() {
         }
 
         try {
-            const { error } = await supabase
+            const priority_score = computeIncidentPriorityScore({
+                type: formData.type,
+                severity: formData.severity,
+                description: formData.description,
+                latitude: formData.latitude,
+                longitude: formData.longitude,
+                existingIncidents,
+            });
+
+            const { data: inserted, error } = await supabase
                 .from('incidents')
                 .insert([
                     {
@@ -324,15 +335,33 @@ export default function ReportIncident() {
                         location: formData.location,
                         description: formData.description,
                         severity: formData.severity,
+                        priority_score,
                         user_id: user.id,
                         user_name: user.name, // Added for admin clarity
                         contact_number: formData.contact_number,
                         latitude: formData.latitude,
                         longitude: formData.longitude
                     }
-                ]);
+                ])
+                .select('id')
+                .single();
 
             if (error) throw error;
+
+            const sessionUser = getCurrentUser();
+            const ackBatchId =
+                typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ack-${Date.now()}`;
+            void sendIncidentAcknowledgment({
+                phone: formData.contact_number,
+                email: sessionUser?.email,
+                incidentId: inserted?.id,
+                type: formData.type,
+                location: formData.location,
+                batchId: ackBatchId,
+                contextType: 'incident_ack',
+                contextId: inserted?.id,
+                createdBy: sessionUser?.id || null,
+            }).catch((ackErr) => console.warn('[acknowledgment]', ackErr));
 
             setLoading(false);
             setSubmitted(true);
@@ -348,8 +377,18 @@ export default function ReportIncident() {
                 navigate('/dashboard');
             }, 3000);
         } catch (error) {
-            console.error('Error submitting report:', error.message);
-            setFeedback({ type: 'error', message: 'Failed to submit report. Please try again.' });
+            console.error('Error submitting report:', error);
+            const msg = String(error?.message || error || '');
+            const rls =
+                msg.toLowerCase().includes('row-level security') || error?.code === '42501';
+            setFeedback({
+                type: 'error',
+                message: rls
+                    ? 'Could not save: database rules blocked this report. In Supabase SQL Editor, run migrations/incidents_rls_insert_residents.sql, then try again.'
+                    : msg
+                      ? `Could not submit: ${msg}`
+                      : 'Failed to submit report. Please try again.',
+            });
             setLoading(false);
         }
     };

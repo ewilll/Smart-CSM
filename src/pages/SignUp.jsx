@@ -20,6 +20,8 @@ export default function SignUp() {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
+    /** When Supabase requires email confirmation before a session exists */
+    const [pendingEmailNotice, setPendingEmailNotice] = useState('');
     const [loading, setLoading] = useState(false);
     const [captchaToken, setCaptchaToken] = useState(null);
     const navigate = useNavigate();
@@ -38,6 +40,8 @@ export default function SignUp() {
         window.location.hostname === '127.0.0.1' ||
         window.location.hostname.endsWith('.loca.lt') ||
         /^(\d{1,3}\.){3}\d{1,3}$/.test(window.location.hostname);
+    /** LAN / vite --host: still dev, but hostname is not "localhost" — skip captcha in dev only */
+    const bypassCaptcha = isLocalIP || import.meta.env.DEV;
 
     const onCaptchaChange = (token) => {
         setCaptchaToken(token);
@@ -53,9 +57,8 @@ export default function SignUp() {
             const result = await signInWithGoogle();
             if (!result.success) {
                 setError(result.message);
-            } else {
-                navigate('/dashboard');
             }
+            // OAuth continues in the same tab via result.url (see auth.js)
         } catch (err) {
             setError('Google sign up failed. Please try again.');
         } finally {
@@ -65,13 +68,14 @@ export default function SignUp() {
 
     const onCaptchaExpired = () => {
         setCaptchaToken(null);
-        if (!isLocalIP) setError('Captcha expired. Please verify again.');
+        if (!bypassCaptcha) setError('Captcha expired. Please verify again.');
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setSuccess(false);
+        setPendingEmailNotice('');
 
         // Validation
         if (password.length < 6) {
@@ -84,7 +88,7 @@ export default function SignUp() {
             return;
         }
 
-        if (!captchaToken && !isLocalIP) {
+        if (!captchaToken && !bypassCaptcha) {
             setError('Please verify you are not a robot.');
             return;
         }
@@ -103,7 +107,14 @@ export default function SignUp() {
             const result = await Promise.race([registrationPromise, timeoutPromise]);
 
             if (result.success) {
-                setSuccess(true);
+                if (result.needsEmailConfirmation) {
+                    setPendingEmailNotice(
+                        'Account created. Check your email and click the confirmation link, then sign in here.'
+                    );
+                } else {
+                    setSuccess(true);
+                    setTimeout(() => navigate('/dashboard'), 1200);
+                }
             } else {
                 if (result.message && (result.message.toLowerCase().includes('already registered') || result.message.includes('422'))) {
                     console.log("User exists, attempting auto-login...");
@@ -112,6 +123,7 @@ export default function SignUp() {
 
                     if (loginResult.success) {
                         setSuccess(true);
+                        setTimeout(() => navigate('/dashboard'), 1200);
                         return;
                     }
                 }
@@ -273,11 +285,18 @@ export default function SignUp() {
                             </div>
                         )}
 
+                        {pendingEmailNotice && (
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 animate-slide-up">
+                                <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                                <p className="text-sm text-blue-800 font-medium">{pendingEmailNotice}</p>
+                            </div>
+                        )}
+
                         {/* Success Message */}
                         {success && (
                             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 animate-slide-up">
                                 <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0" />
-                                <p className="text-sm text-green-400 font-medium">Account created! Redirecting...</p>
+                                <p className="text-sm text-green-400 font-medium">Account ready! Redirecting...</p>
                             </div>
                         )}
 
@@ -306,7 +325,7 @@ export default function SignUp() {
                             )}
                         </button>
 
-                        {!isLocalIP ? (
+                        {!bypassCaptcha ? (
                             <div className="flex justify-center mt-2 scale-[0.85] origin-center opacity-90 hover:opacity-100 transition-opacity">
                                 <ReCAPTCHA
                                     sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}

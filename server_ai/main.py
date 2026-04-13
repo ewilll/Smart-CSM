@@ -3,6 +3,11 @@ from pydantic import BaseModel
 import joblib
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from dotenv import load_dotenv
+
+# Load Smart-CSM/.env (parent of server_ai/) for HTTPSMS + Gmail keys
+_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(_env_path)
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Optional
@@ -13,11 +18,18 @@ import csv
 from datetime import datetime
 from model_trainer import train_model
 import json
+from notify_routes import create_notify_router
+from delivery_bootstrap import try_bootstrap_delivery_logs
 
-# Security Configuration
-API_SECRET_KEY = "csm_secure_ai_access_2024" # In production, this should be in .env
+# Security: set CSM_API_SECRET in .env (must match frontend X-CSM-Secret)
+API_SECRET_KEY = os.getenv("CSM_API_SECRET", "csm_secure_ai_access_2024")
 
 app = FastAPI(title="Smart_CSM Local AI")
+
+
+@app.on_event("startup")
+async def _bootstrap_delivery_logs_table() -> None:
+    await try_bootstrap_delivery_logs()
 
 # Allow CORS for React frontend
 app.add_middleware(
@@ -54,6 +66,8 @@ async def verify_secret(x_csm_secret: str = Header(None)):
     return x_csm_secret
 
 load_ai_model()
+
+app.include_router(create_notify_router(verify_secret))
 
 class UserMessage(BaseModel):
     message: str

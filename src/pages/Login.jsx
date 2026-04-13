@@ -22,6 +22,7 @@ export default function Login() {
         window.location.hostname === '127.0.0.1' ||
         window.location.hostname.endsWith('.loca.lt') ||
         /^(\d{1,3}\.){3}\d{1,3}$/.test(window.location.hostname);
+    const bypassCaptcha = isLocalIP || import.meta.env.DEV;
 
     const onCaptchaChange = (token) => {
         setCaptchaToken(token);
@@ -51,7 +52,7 @@ export default function Login() {
         setError('');
         setLoading(true);
 
-        if (!captchaToken && !isLocalIP) {
+        if (!captchaToken && !bypassCaptcha) {
             setError('Please verify you are not a robot.');
             setLoading(false);
             return;
@@ -209,7 +210,7 @@ export default function Login() {
                             )}
                         </button>
 
-                        {!isLocalIP ? (
+                        {!bypassCaptcha ? (
                             <div className="flex justify-center mt-2 scale-[0.85] origin-center opacity-90 hover:opacity-100 transition-opacity">
                                 <ReCAPTCHA
                                     sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}

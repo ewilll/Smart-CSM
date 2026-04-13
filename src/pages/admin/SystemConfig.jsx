@@ -36,32 +36,14 @@ export default function SystemConfig() {
     const [loading, setLoading] = useState(true);
     const [serverOffline, setServerOffline] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(() => getCurrentUser());
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [notification, setNotification] = useState(null);
     const navigate = useNavigate();
     const { language } = usePreferences() || { language: 'EN' };
     const { t } = useTranslation(language);
 
-    useEffect(() => {
-        if (!isAuthenticated()) {
-            navigate('/login');
-            return;
-        }
-        setUser(getCurrentUser());
-        loadConfig();
-    }, [navigate]);
-    const [activeTab, setActiveTab] = useState('barangays');
-
-    // Edit states
-    const [newBarangay, setNewBarangay] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
-
-    useEffect(() => {
-        loadConfig();
-    }, []);
-
-    const loadConfig = async () => {
+    async function loadConfig() {
         setLoading(true);
         const data = await getSystemConfig();
         if (data) {
@@ -71,7 +53,20 @@ export default function SystemConfig() {
             setServerOffline(true);
         }
         setLoading(false);
-    };
+    }
+
+    useEffect(() => {
+        if (!isAuthenticated()) {
+            navigate('/login');
+            return;
+        }
+        loadConfig();
+    }, [navigate]);
+    const [activeTab, setActiveTab] = useState('barangays');
+
+    // Edit states
+    const [newBarangay, setNewBarangay] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const handleSave = async () => {
         setSaving(true);

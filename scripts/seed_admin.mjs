@@ -78,10 +78,16 @@ async function main() {
       if (!userId) die(`User exists but could not resolve id for ${email}. Check Auth users in the dashboard.`);
       const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
         password,
+        email_confirm: true,
         user_metadata: { full_name: fullName },
       });
-      if (updErr) console.warn('Could not reset password/metadata:', updErr.message);
-      console.log(`Auth user already existed; updated password/metadata for ${email}`);
+      if (updErr) {
+        die(
+          `Auth user exists but password/metadata update failed: ${updErr.message}\n` +
+            'Fix SUPABASE_SERVICE_ROLE_KEY (must be the Secret / service_role key for this same project URL), then run npm run seed:admin again.'
+        );
+      }
+      console.log(`Auth user already existed; password and metadata synced for ${email}`);
     } else {
       die(`createUser failed: ${createErr.message}`);
     }

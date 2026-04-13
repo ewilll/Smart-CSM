@@ -8,6 +8,7 @@ import { getCurrentUser, isAuthenticated } from '../../utils/auth';
 import { useNavigate } from 'react-router-dom';
 import { Map as MapIcon, Navigation, Layers, AlertTriangle } from 'lucide-react';
 import L from 'leaflet';
+import { compareIncidentsForWorkQueue } from '../../utils/incidentPriority';
 
 // Fix for default Leaflet icon not working with bundlers
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -105,7 +106,9 @@ export default function MapDashboard() {
                 .not('longitude', 'is', null);
 
             if (error) throw error;
-            setIncidents(data || []);
+            const rows = data || [];
+            rows.sort(compareIncidentsForWorkQueue);
+            setIncidents(rows);
         } catch (err) {
             console.error('Error fetching incidents:', err.message);
         } finally {
