@@ -19,15 +19,18 @@ import { useTranslation } from '../../utils/translations';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
+export default function AdminAnalytics({ incidents = [], users = [], onSwitchTab }) {
     const { language } = usePreferences() || { language: 'EN' };
     const { t } = useTranslation(language);
 
+    const safeIncidents = Array.isArray(incidents) ? incidents : [];
+    const safeUsers = Array.isArray(users) ? users : [];
+
     // Process Incident Status Data
     const statusData = [
-        { name: t('pending'), value: incidents.filter(i => i.status === 'Pending').length },
-        { name: t('in_progress'), value: incidents.filter(i => ['In Progress', 'Dispatched'].includes(i.status)).length },
-        { name: t('resolved'), value: incidents.filter(i => i.status === 'Resolved').length },
+        { name: t('pending'), value: safeIncidents.filter(i => i.status === 'Pending').length },
+        { name: t('in_progress'), value: safeIncidents.filter(i => ['In Progress', 'Dispatched'].includes(i.status)).length },
+        { name: t('resolved'), value: safeIncidents.filter(i => i.status === 'Resolved').length },
     ];
 
     // --- REAL ANALYTICS DATA PROCESSING ---
@@ -50,7 +53,7 @@ export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
         }
 
         // Count users per bucket
-        users.forEach(u => {
+        safeUsers.forEach(u => {
             const d = new Date(u.created_at);
             const bucket = last6Months.find(b => b.monthIndex === d.getMonth() && b.year === d.getFullYear());
             if (bucket) bucket.users++;
@@ -61,7 +64,7 @@ export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
         let runningTotal = 0;
         return last6Months.map(m => {
             runningTotal += m.users;
-            return { name: m.name, users: runningTotal + (users.length > 50 ? 100 : 0) }; // +Base offset if needed
+            return { name: m.name, users: runningTotal + (safeUsers.length > 50 ? 100 : 0) }; // +Base offset if needed
         });
     };
     const userGrowthData = processUserGrowth();
@@ -83,7 +86,7 @@ export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
             });
         }
 
-        incidents.forEach(i => {
+        safeIncidents.forEach(i => {
             const dateStr = new Date(i.created_at).toISOString().split('T')[0];
             const updatedStr = new Date(i.updated_at || i.created_at).toISOString().split('T')[0];
 
@@ -101,16 +104,16 @@ export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
     const activityData = processWeeklyActivity();
 
     const handleDownloadCSV = () => {
-        if (!incidents.length) return;
+        if (!safeIncidents.length) return;
 
         const headers = ['ID', 'Type', 'Location', 'Status', 'Severity', 'Description', 'Reported By', 'Date'];
-        const rows = incidents.map(i => [
+        const rows = safeIncidents.map(i => [
             i.id,
             i.type,
-            `"${i.location.replace(/"/g, '""')}"`,
+            `"${(i.location || '').replace(/"/g, '""')}"`,
             i.status,
             i.severity,
-            `"${i.description.replace(/"/g, '""')}"`,
+            `"${(i.description || '').replace(/"/g, '""')}"`,
             i.user_name || 'Anonymous',
             new Date(i.created_at).toLocaleDateString()
         ]);
@@ -155,7 +158,7 @@ export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
                     </div>
                     <div>
                         <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{t('total_residents')}</p>
-                        <h3 className="text-3xl font-black text-slate-900">{users.length}</h3>
+                        <h3 className="text-3xl font-black text-slate-900">{safeUsers.length}</h3>
                     </div>
                 </div>
                 <div
@@ -167,7 +170,7 @@ export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
                     </div>
                     <div>
                         <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{t('active_reports')}</p>
-                        <h3 className="text-3xl font-black text-slate-900">{incidents.filter(i => i.status !== 'Resolved').length}</h3>
+                        <h3 className="text-3xl font-black text-slate-900">{safeIncidents.filter(i => i.status !== 'Resolved').length}</h3>
                     </div>
                 </div>
                 <div
@@ -180,8 +183,8 @@ export default function AdminAnalytics({ incidents, users, onSwitchTab }) {
                     <div>
                         <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{t('resolution_rate')}</p>
                         <h3 className="text-3xl font-black text-slate-900">
-                            {incidents.length > 0
-                                ? Math.round((incidents.filter(i => i.status === 'Resolved').length / incidents.length) * 100)
+                            {safeIncidents.length > 0
+                                ? Math.round((safeIncidents.filter(i => i.status === 'Resolved').length / safeIncidents.length) * 100)
                                 : 0}%
                         </h3>
                     </div>

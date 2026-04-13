@@ -8,10 +8,12 @@
     "share": "npx localtunnel --port 5173",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:admin": "node scripts/seed_admin.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.95.3",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
     "dotenv": "^17.3.1",
     "framer-motion": "^12.34.0",
     "jspdf": "^4.2.0",

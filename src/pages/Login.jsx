@@ -58,7 +58,9 @@ export default function Login() {
         }
 
         try {
-            // Create a Promise race between the login and a timeout
+            // AuthHandler only navigates after SIGNED_IN when this flag is set (same as Google login).
+            localStorage.setItem('smart_csm_auth_intent', 'login');
+
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Login timed out. Please check your connection.')), 15000)
             );
@@ -71,10 +73,12 @@ export default function Login() {
                 setSuccess(true);
                 // Redirect will be handled by AuthHandler in App.jsx
             } else {
+                localStorage.removeItem('smart_csm_auth_intent');
                 setError(result.message);
             }
         } catch (err) {
             console.error("Login Error:", err);
+            localStorage.removeItem('smart_csm_auth_intent');
             setError(err.message || 'An unexpected error occurred. Please try again.');
         } finally {
             setLoading(false);

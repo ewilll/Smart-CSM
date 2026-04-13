@@ -30,6 +30,7 @@ import SecurePlatform from './pages/features/SecurePlatform';
 import ServiceMap from './pages/user/ServiceMap';
 import InstallPrompt from './components/InstallPrompt';
 import GlobalTicker from './components/common/GlobalTicker';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminRoute from './components/auth/AdminRoute';
 import { NotificationProvider } from './context/NotificationContext';
@@ -180,6 +181,13 @@ function App() {
       <div className="app-container">
         <AuthHandler setGlobalLoading={setLoading} setAuthSettled={setAuthSettled} />
 
+        {!authSettled && !loading && (
+          <div className="fixed inset-0 z-[99998] flex flex-col items-center justify-center bg-slate-50 text-slate-600 gap-3">
+            <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+            <p className="text-sm font-semibold tracking-tight">Starting session…</p>
+          </div>
+        )}
+
         {loading && (
           <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-white/95 backdrop-blur-md animate-fade-in text-center p-6">
             <div className="w-24 h-24 mb-8 relative">
@@ -199,6 +207,7 @@ function App() {
         {authSettled && (
           <PreferencesProvider>
             <NotificationProvider>
+              <RouteErrorBoundary>
               <GlobalTicker />
               <Routes>
                 <Route path="/" element={<Home />} />
@@ -238,6 +247,7 @@ function App() {
               </Routes>
               <Chatbot />
               <InstallPrompt />
+              </RouteErrorBoundary>
             </NotificationProvider>
           </PreferencesProvider>
         )}
