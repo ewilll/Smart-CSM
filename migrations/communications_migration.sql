@@ -25,11 +25,17 @@ CREATE POLICY "Anyone can view active announcements" ON announcements
     FOR SELECT TO authenticated
     USING ( is_active = true );
 
--- Only admins can manage announcements
+-- Only admins can manage announcements (any profile with role = admin, any device / account)
 DROP POLICY IF EXISTS "Admins can manage announcements" ON announcements;
 CREATE POLICY "Admins can manage announcements" ON announcements
     FOR ALL TO authenticated
-    USING ( (auth.jwt() ->> 'email') = 'akazayasussy@gmail.com' );
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid()
+            AND profiles.role = 'admin'
+        )
+    );
 
 -- 2. MESSAGES TABLE (1-to-1 Support Communication)
 CREATE TABLE IF NOT EXISTS public.messages (
@@ -63,7 +69,13 @@ CREATE POLICY "Users can send messages" ON messages
 DROP POLICY IF EXISTS "Admins can view all messages" ON messages;
 CREATE POLICY "Admins can view all messages" ON messages
     FOR ALL TO authenticated
-    USING ( (auth.jwt() ->> 'email') = 'akazayasussy@gmail.com' );
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid()
+            AND profiles.role = 'admin'
+        )
+    );
 
 -- Enable Realtime for these tables
 ALTER PUBLICATION supabase_realtime ADD TABLE announcements;
