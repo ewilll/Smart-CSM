@@ -162,15 +162,19 @@ export const registerUser = async (userData) => {
         const firstName = String(userData.firstName ?? '').trim();
         const lastName = String(userData.lastName ?? '').trim();
         const middleInitial = String(userData.middleInitial ?? '').trim();
+        const emailTrimmed = String(userData.email ?? '').trim();
 
         if (!firstName || !lastName) {
             return { success: false, message: 'First name and last name are required.' };
+        }
+        if (!emailTrimmed || !emailTrimmed.includes('@')) {
+            return { success: false, message: 'Please enter a valid email address.' };
         }
 
         const displayFullName = buildSignUpFullName(firstName, middleInitial, lastName);
 
         const signUpPayload = {
-            email: userData.email,
+            email: emailTrimmed,
             password: userData.password,
             options: {
                 emailRedirectTo: `${oauthRedirectBase()}/login`,
@@ -185,6 +189,7 @@ export const registerUser = async (userData) => {
                 },
             },
         };
+        const siteOrigin = oauthRedirectBase();
         // Only send captcha when present — undefined breaks some Supabase / captcha configs
         if (userData.captchaToken) {
             signUpPayload.options.captchaToken = userData.captchaToken;
@@ -201,8 +206,27 @@ export const registerUser = async (userData) => {
             return { success: false, message: 'Sign up did not return a user. Check Supabase Auth settings.' };
         }
 
+        // Supabase hides duplicate sign-ups: user object exists but identities is empty — no account, no email.
+        const identities = user.identities;
+        if (Array.isArray(identities) && identities.length === 0) {
+            return {
+                success: false,
+                message: 'This email is already registered. Try signing in instead.',
+            };
+        }
+
         // Email confirmation enabled → no session yet → cannot INSERT profiles from browser (RLS needs auth.uid())
         if (!session) {
+            import('./notifyService.js')
+                .then((m) =>
+                    m.sendSignupRelatedEmail({
+                        to: emailTrimmed,
+                        kind: 'pending_confirmation',
+                        displayName: displayFullName,
+                        siteOrigin,
+                    })
+                )
+                .catch(() => {});
             return {
                 success: true,
                 user,
@@ -217,7 +241,7 @@ export const registerUser = async (userData) => {
                 first_name: firstName,
                 last_name: lastName,
                 role: userData.role || 'customer',
-                email: userData.email,
+                email: emailTrimmed,
                 phone: userData.phone,
                 barangay: userData.barangay,
                 account_no: `PW-${firstName.replace(/\s+/g, '').toUpperCase().slice(0, 12) || 'NEW'}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -232,6 +256,17 @@ export const registerUser = async (userData) => {
         if (!sync.success) {
             console.warn('Session sync after sign up:', sync.message);
         }
+
+        import('./notifyService.js')
+            .then((m) =>
+                m.sendSignupRelatedEmail({
+                    to: emailTrimmed,
+                    kind: 'welcome',
+                    displayName: displayFullName,
+                    siteOrigin,
+                })
+            )
+            .catch(() => {});
 
         return { success: true, user, needsEmailConfirmation: false };
     } catch (error) {

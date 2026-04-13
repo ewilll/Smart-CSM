@@ -1,6 +1,8 @@
 /**
  * Broadcast advisory SMS via FastAPI + httpSMS (never ship API keys to the browser).
  */
+import { formatFastApiDetail } from './formatApiError';
+
 const NOTIFY_BASE = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
 const NOTIFY_SECRET = import.meta.env.VITE_CSM_AI_SECRET || 'csm_secure_ai_access_2024';
 
@@ -40,9 +42,13 @@ export const broadcastSmsToResidents = async (announcement, users, deliveryMeta 
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
             console.error('[SMS broadcast] API error', res.status, data);
+            const msg = formatFastApiDetail(
+                data.detail,
+                typeof data.message === 'string' ? data.message : res.statusText
+            );
             return {
                 success: false,
-                message: data.detail || data.message || res.statusText,
+                message: msg,
                 count: 0,
                 failedCount: phones.length,
             };

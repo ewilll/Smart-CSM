@@ -49,6 +49,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { broadcastSmsToResidents } from '../../utils/smsService';
 import { sendIncidentStatusNotifications, sendBroadcastEmails, retryDeliveryLog } from '../../utils/notifyService';
+import { formatFastApiDetail } from '../../utils/formatApiError';
 import { motion, AnimatePresence } from 'framer-motion';
 import AnimatedBackground from '../../components/AnimatedBackground';
 import { usePreferences } from '../../context/PreferencesContext';
@@ -151,6 +152,73 @@ function deliveryZeroRecipientHintKeys({ rawRecipients, targeted, target_baranga
         keys.push('delivery_zero_no_valid_emails');
     }
     return keys;
+}
+
+/** Avoid “1 target, 0 delivered, 0 failed” when the notify HTTP call failed and returned no counts. */
+function summarizeEmailBulkReport(emailResult, totalTargets) {
+    if (totalTargets <= 0) {
+        return { successCount: 0, failedCount: 0, errorHint: null };
+    }
+    if (!emailResult) {
+        return {
+            successCount: 0,
+            failedCount: totalTargets,
+            errorHint: 'No response from the notify server. Is it running and is VITE_AI_SERVER_URL correct?',
+        };
+    }
+    if (emailResult.skipped) {
+        return { successCount: 0, failedCount: 0, errorHint: null };
+    }
+    if (emailResult.ok === false) {
+        const hint = formatFastApiDetail(
+            emailResult.detail,
+            emailResult.error ||
+                (emailResult.status ? `Notify server HTTP ${emailResult.status}` : '') ||
+                'Email send request failed.'
+        );
+        return { successCount: 0, failedCount: totalTargets, errorHint: hint };
+    }
+    const sc = Number(emailResult.successCount);
+    const fc = Number(emailResult.failedCount);
+    const successCount = Number.isFinite(sc) ? sc : 0;
+    const failedCount = Number.isFinite(fc) ? fc : Math.max(0, totalTargets - successCount);
+    let errorHint = null;
+    if (failedCount > 0 && Array.isArray(emailResult.results)) {
+        const errs = emailResult.results
+            .filter((r) => r && r.ok === false)
+            .map((r) => formatFastApiDetail(r.error, String(r.error ?? '')))
+            .filter(Boolean);
+        if (errs.length) errorHint = errs.slice(0, 3).join(' · ');
+    }
+    const hintStr = errorHint == null || errorHint === '' ? null : formatFastApiDetail(errorHint, String(errorHint));
+    return { successCount, failedCount, errorHint: hintStr };
+}
+
+function summarizeSmsBulkReport(smsResult, totalTargets) {
+    if (totalTargets <= 0) {
+        return { successCount: 0, failedCount: 0, errorHint: null };
+    }
+    if (!smsResult) {
+        return {
+            successCount: 0,
+            failedCount: totalTargets,
+            errorHint: 'No response from the notify server. Is it running and is VITE_AI_SERVER_URL correct?',
+        };
+    }
+    const sc = Number(smsResult.count);
+    const fc = Number(smsResult.failedCount);
+    const successCount = Number.isFinite(sc) ? sc : 0;
+    const failedCount = Number.isFinite(fc) ? fc : Math.max(0, totalTargets - successCount);
+    let errorHint = (smsResult.success === false && smsResult.message) ? smsResult.message : null;
+    if (!errorHint && failedCount > 0 && Array.isArray(smsResult.results)) {
+        const errs = smsResult.results
+            .filter((r) => r && r.ok === false)
+            .map((r) => formatFastApiDetail(r.error, String(r.error ?? '')))
+            .filter(Boolean);
+        if (errs.length) errorHint = errs.slice(0, 3).join(' · ');
+    }
+    const hintStr = errorHint == null || errorHint === '' ? null : formatFastApiDetail(errorHint, String(errorHint));
+    return { successCount, failedCount, errorHint: hintStr };
 }
 
 export default function AdminDashboard() {
@@ -495,12 +563,7 @@ export default function AdminDashboard() {
         setRetryingDeliveryId(logId);
         try {
             const res = await retryDeliveryLog(logId);
-            const errMsg =
-                typeof res.detail === 'string'
-                    ? res.detail
-                    : Array.isArray(res.detail)
-                      ? res.detail.map((d) => d?.msg || d).join('; ')
-                      : res.error || res.message || 'Retry failed';
+            const errMsg = formatFastApiDetail(res.detail, res.error || res.message || 'Retry failed');
             if (!res.ok) {
                 setNotification({ type: 'error', message: errMsg });
             } else {
@@ -593,20 +656,24 @@ export default function AdminDashboard() {
                               withEmail,
                           })
                         : [];
+                const smsSummary = send_sms ? summarizeSmsBulkReport(smsResult, withPhone.length) : null;
+                const emailSummary = send_email ? summarizeEmailBulkReport(emailResult, withEmail.length) : null;
                 setDeliveryReport({
                     announcement: dbPayload,
                     sms: send_sms
                         ? {
                               totalTarget: withPhone.length,
-                              successCount: smsResult?.count ?? 0,
-                              failedCount: smsResult?.failedCount ?? 0,
+                              successCount: smsSummary.successCount,
+                              failedCount: smsSummary.failedCount,
+                              errorHint: smsSummary.errorHint,
                           }
                         : null,
                     email: send_email
                         ? {
                               totalTarget: withEmail.length,
-                              successCount: emailResult?.successCount ?? 0,
-                              failedCount: emailResult?.failedCount ?? 0,
+                              successCount: emailSummary.successCount,
+                              failedCount: emailSummary.failedCount,
+                              errorHint: emailSummary.errorHint,
                           }
                         : null,
                     timestamp: new Date().toISOString(),
@@ -2595,6 +2662,11 @@ export default function AdminDashboard() {
                                                     <span className="text-rose-600 font-bold">{t('failed')}</span>
                                                     <span className="font-black text-rose-600">{deliveryReport.sms.failedCount}</span>
                                                 </div>
+                                                {deliveryReport.sms.errorHint && (
+                                                    <p className="text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug mt-2">
+                                                        {deliveryReport.sms.errorHint}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -2615,6 +2687,11 @@ export default function AdminDashboard() {
                                                     <span className="text-rose-600 font-bold">{t('failed')}</span>
                                                     <span className="font-black text-rose-600">{deliveryReport.email.failedCount}</span>
                                                 </div>
+                                                {deliveryReport.email.errorHint && (
+                                                    <p className="text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug mt-2">
+                                                        {deliveryReport.email.errorHint}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     )}

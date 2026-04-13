@@ -156,7 +156,7 @@ export default function SignUp() {
                     const origin = typeof window !== 'undefined' ? window.location.origin : '';
                     setAwaitingEmailConfirmation(true);
                     setPendingEmailNotice(
-                        'Account created. Supabase should send “Confirm your signup” to the address you entered (sender is often noreply@mail.app.supabase.io unless you use custom SMTP).\n\n' +
+                        'Account created. You should get a “Confirm your signup” message from the sign-in provider (sender is often noreply@mail.app.supabase.io unless you use custom SMTP). If the server is configured for outbound mail, you may also receive a short message from PrimeWater with the same tips below.\n\n' +
                         'If nothing arrives:\n' +
                         '• Check Spam / Promotions.\n' +
                         `• Authentication → URL configuration: add ${origin} and ${origin}/login to Redirect URLs. Site URL should be ${origin} (or your production URL).\n` +
@@ -364,9 +364,18 @@ export default function SignUp() {
 
                         {/* Error Message */}
                         {error && (
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 animate-slide-up">
-                                <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
-                                <p className="text-sm text-red-400 font-medium">{error}</p>
+                            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 animate-slide-up">
+                                <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+                                <div className="min-w-0">
+                                    <p className="text-sm text-red-400 font-medium">{error}</p>
+                                    {/already registered|signing in instead/i.test(error) && (
+                                        <p className="mt-2 text-xs font-bold text-red-700/90">
+                                            <Link to="/login" className="underline hover:text-red-900">Sign in</Link>
+                                            <span className="mx-1.5 text-red-400/80" aria-hidden>·</span>
+                                            <Link to="/forgot-password" className="underline hover:text-red-900">Forgot password</Link>
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         )}
 

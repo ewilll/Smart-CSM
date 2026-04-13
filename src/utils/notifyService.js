@@ -3,6 +3,8 @@
  * Set VITE_AI_SERVER_URL if the API is not on localhost:8000.
  * Optional VITE_CSM_AI_SECRET must match server CSM_API_SECRET (default capstone value if unset).
  */
+import { formatFastApiDetail } from './formatApiError';
+
 const NOTIFY_BASE = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
 const NOTIFY_SECRET = import.meta.env.VITE_CSM_AI_SECRET || 'csm_secure_ai_access_2024';
 
@@ -19,7 +21,8 @@ async function postNotify(path, jsonBody) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
             console.error('[notify]', path, res.status, data);
-            return { ok: false, status: res.status, ...data };
+            const detailStr = formatFastApiDetail(data?.detail, res.statusText);
+            return { ok: false, status: res.status, ...data, detail: detailStr };
         }
         return { ok: true, ...data };
     } catch (e) {
@@ -116,4 +119,47 @@ export async function sendBroadcastEmails({ emails, subject, body, batchId, cont
 /** Re-send a failed row logged in delivery_logs (admin UI). */
 export async function retryDeliveryLog(deliveryLogId) {
     return postNotify('/notify/retry-delivery', { delivery_log_id: deliveryLogId });
+}
+
+/**
+ * Transactional signup mail via FastAPI + Gmail (same secret as other notify calls).
+ * Use when Supabase does not send (e.g. duplicate-email response) or as a backup / welcome.
+ * @param {{ to: string, kind: 'pending_confirmation' | 'welcome', displayName?: string, siteOrigin?: string }} params
+ */
+export async function sendSignupRelatedEmail({ to, kind, displayName, siteOrigin }) {
+    const addr = String(to || '').trim();
+    if (!addr.includes('@')) {
+        return { ok: false, skipped: true };
+    }
+    const origin = siteOrigin || (typeof window !== 'undefined' ? window.location.origin : '');
+    const name = String(displayName || '').trim() || 'there';
+    if (kind === 'pending_confirmation') {
+        const body =
+            `Hi ${name},\n\n` +
+            `We received your registration for PrimeWater Smart CSM.\n\n` +
+            `You should also get a separate message from our sign-in provider with a link to confirm your email ` +
+            `(the sender may look like a Supabase address). Check Spam or Promotions.\n\n` +
+            `If nothing arrives within a few minutes, open ${origin}/signup, enter the same email, and tap ` +
+            `"Resend confirmation email".\n\n` +
+            `— PrimeWater Malaybalay (Smart CSM)`;
+        return postNotify('/notify/email', {
+            to: addr,
+            subject: 'PrimeWater Smart CSM — Confirm your email',
+            body,
+            context_type: 'signup_pending_confirmation',
+        });
+    }
+    if (kind === 'welcome') {
+        const body =
+            `Hi ${name},\n\n` +
+            `Your PrimeWater Smart CSM account is ready. You can sign in anytime at ${origin}/login.\n\n` +
+            `— PrimeWater Malaybalay (Smart CSM)`;
+        return postNotify('/notify/email', {
+            to: addr,
+            subject: 'Welcome to PrimeWater Smart CSM',
+            body,
+            context_type: 'signup_welcome',
+        });
+    }
+    return { ok: false, skipped: true };
 }
