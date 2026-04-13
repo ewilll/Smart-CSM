@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { usePreferences } from '../../context/PreferencesContext';
 import { useTranslation } from '../../utils/translations';
+import { AlertCircle, FileSpreadsheet, TrendingUp, Users } from 'lucide-react';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
