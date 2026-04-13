@@ -2,14 +2,17 @@
 -- This script sets up the tables for Announcements and 1-to-1 Support Messaging.
 
 -- 1. ANNOUNCEMENTS TABLE (City-wide alerts)
+-- Columns must match the Vite app: title, content, type, is_active (see AdminDashboard.jsx).
+-- If you already created this table with subject/category, run announcements_schema_align.sql once.
 CREATE TABLE IF NOT EXISTS public.announcements (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT now(),
-    sender TEXT DEFAULT 'PrimeWater Admin',
-    subject TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    title TEXT NOT NULL,
     content TEXT NOT NULL,
-    category TEXT DEFAULT 'Announcements', -- 'Announcements', 'Alerts', 'Maintenance'
+    type TEXT NOT NULL DEFAULT 'Emergency',
     is_active BOOLEAN DEFAULT true,
+    sender TEXT DEFAULT 'PrimeWater Admin',
     expires_at TIMESTAMPTZ
 );
 
