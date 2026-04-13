@@ -57,6 +57,20 @@ export function formatAuthErrorMessage(raw) {
         return 'This email is already registered. Try signing in instead.';
     }
 
+    if (
+        lower.includes('error sending') ||
+        lower.includes('sending confirmation email') ||
+        lower.includes('unable to send') ||
+        lower.includes('email could not be sent') ||
+        lower.includes('smtp')
+    ) {
+        return (
+            'Supabase could not send the email (SMTP or provider issue). In the dashboard: Project Settings → Auth → ' +
+            'SMTP Settings — set a custom SMTP, or check Logs → Auth. Free-tier mail often lands in Spam. ' +
+            'For development you can disable “Confirm email” under Authentication → Providers → Email.'
+        );
+    }
+
     return msg;
 }
 
@@ -123,18 +137,51 @@ export const signInWithGoogle = async () => {
 };
 
 /**
+ * Build display full name from structured signup fields (middle initial optional).
+ */
+export function buildSignUpFullName(firstName, middleInitial, lastName) {
+    const f = String(firstName || '').trim();
+    const l = String(lastName || '').trim();
+    const raw = String(middleInitial || '').trim();
+    let mid = '';
+    if (raw.length === 1) {
+        mid = `${raw.toUpperCase()}.`;
+    } else if (raw.length > 1) {
+        mid = raw.endsWith('.') ? raw : raw;
+    }
+    const parts = mid ? [f, mid, l] : [f, l];
+    return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Register a new user with Supabase Auth and create a profile
+ * @param {object} userData - expects firstName, lastName, optional middleInitial (not name)
  */
 export const registerUser = async (userData) => {
     try {
+        const firstName = String(userData.firstName ?? '').trim();
+        const lastName = String(userData.lastName ?? '').trim();
+        const middleInitial = String(userData.middleInitial ?? '').trim();
+
+        if (!firstName || !lastName) {
+            return { success: false, message: 'First name and last name are required.' };
+        }
+
+        const displayFullName = buildSignUpFullName(firstName, middleInitial, lastName);
+
         const signUpPayload = {
             email: userData.email,
             password: userData.password,
             options: {
                 emailRedirectTo: `${oauthRedirectBase()}/login`,
                 data: {
-                    full_name: userData.name,
+                    full_name: displayFullName,
+                    first_name: firstName,
+                    last_name: lastName,
+                    middle_initial: middleInitial || '',
                     role: userData.role || 'customer',
+                    phone: userData.phone || '',
+                    barangay: userData.barangay || '',
                 },
             },
         };
@@ -166,12 +213,14 @@ export const registerUser = async (userData) => {
         const { error: profileError } = await supabase.from('profiles').insert([
             {
                 id: user.id,
-                full_name: userData.name,
+                full_name: displayFullName,
+                first_name: firstName,
+                last_name: lastName,
                 role: userData.role || 'customer',
                 email: userData.email,
                 phone: userData.phone,
                 barangay: userData.barangay,
-                account_no: `PW-${userData.name?.split(' ')[0].toUpperCase() || 'NEW'}-${Math.floor(1000 + Math.random() * 9000)}`,
+                account_no: `PW-${firstName.replace(/\s+/g, '').toUpperCase().slice(0, 12) || 'NEW'}-${Math.floor(1000 + Math.random() * 9000)}`,
             },
         ]);
 
@@ -187,6 +236,30 @@ export const registerUser = async (userData) => {
         return { success: true, user, needsEmailConfirmation: false };
     } catch (error) {
         console.error('Registration Error:', error);
+        return { success: false, message: formatAuthErrorMessage(error.message) };
+    }
+};
+
+/**
+ * Ask Supabase to send the sign-up confirmation email again (same redirect as registerUser).
+ * Use when the user created an account but did not receive the first message.
+ */
+export const resendSignupConfirmationEmail = async (email) => {
+    try {
+        const emailTrimmed = String(email || '').trim();
+        if (!emailTrimmed) {
+            return { success: false, message: 'Please enter the email you signed up with.' };
+        }
+        const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: emailTrimmed,
+            options: {
+                emailRedirectTo: `${oauthRedirectBase()}/login`,
+            },
+        });
+        if (error) throw error;
+        return { success: true };
+    } catch (error) {
         return { success: false, message: formatAuthErrorMessage(error.message) };
     }
 };
@@ -253,13 +326,17 @@ export const isAuthenticated = () => {
  */
 export const sendPasswordResetEmail = async (email) => {
     try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/login`,
+        const emailTrimmed = String(email || '').trim();
+        if (!emailTrimmed) {
+            return { success: false, message: 'Please enter your email address.' };
+        }
+        const { error } = await supabase.auth.resetPasswordForEmail(emailTrimmed, {
+            redirectTo: `${oauthRedirectBase()}/login`,
         });
         if (error) throw error;
         return { success: true };
     } catch (error) {
-        return { success: false, message: error.message };
+        return { success: false, message: formatAuthErrorMessage(error.message) };
     }
 };
 

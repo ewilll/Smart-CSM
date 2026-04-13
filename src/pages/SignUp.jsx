@@ -3,13 +3,15 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Droplets, User, Mail, Lock, ArrowRight, CheckCircle, AlertCircle, Eye, EyeOff, Phone, MapPin, ArrowLeft } from 'lucide-react';
 
 import AnimatedBackground from '../components/AnimatedBackground';
-import { registerUser, signInWithGoogle, loginUser } from '../utils/auth';
+import { registerUser, signInWithGoogle, loginUser, resendSignupConfirmationEmail } from '../utils/auth';
 import ReCAPTCHA from "react-google-recaptcha";
 import LocationPickerModal from '../components/LocationPickerModal';
 
 export default function SignUp() {
     const [role, setRole] = useState('customer');
-    const [name, setName] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [middleInitial, setMiddleInitial] = useState('');
+    const [lastName, setLastName] = useState('');
     const [phone, setPhone] = useState('');
     const [barangay, setBarangay] = useState('');
     const [isMapOpen, setIsMapOpen] = useState(false);
@@ -22,6 +24,9 @@ export default function SignUp() {
     const [success, setSuccess] = useState(false);
     /** When Supabase requires email confirmation before a session exists */
     const [pendingEmailNotice, setPendingEmailNotice] = useState('');
+    const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendInfo, setResendInfo] = useState('');
     const [loading, setLoading] = useState(false);
     const [captchaToken, setCaptchaToken] = useState(null);
     const navigate = useNavigate();
@@ -71,11 +76,36 @@ export default function SignUp() {
         if (!bypassCaptcha) setError('Captcha expired. Please verify again.');
     };
 
+    const handleResendConfirmation = async () => {
+        setError('');
+        setResendInfo('');
+        const trimmed = email.trim();
+        if (!trimmed) {
+            setError('Enter the same email you used above, then tap Resend.');
+            return;
+        }
+        setResendLoading(true);
+        try {
+            const result = await resendSignupConfirmationEmail(trimmed);
+            if (!result.success) {
+                setError(result.message);
+                return;
+            }
+            setResendInfo('Another confirmation message was requested. Check your inbox and spam folder.');
+        } catch (err) {
+            setError(err?.message || 'Could not resend. Try again in a minute.');
+        } finally {
+            setResendLoading(false);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setSuccess(false);
         setPendingEmailNotice('');
+        setAwaitingEmailConfirmation(false);
+        setResendInfo('');
 
         // Validation
         if (password.length < 6) {
@@ -85,6 +115,11 @@ export default function SignUp() {
 
         if (password !== confirmPassword) {
             setError('Passwords do not match');
+            return;
+        }
+
+        if (!firstName.trim() || !lastName.trim()) {
+            setError('First name and last name are required.');
             return;
         }
 
@@ -102,14 +137,33 @@ export default function SignUp() {
                 setTimeout(() => reject(new Error('Request timed out. Please check your connection.')), 20000)
             );
 
-            const registrationPromise = registerUser({ name, email, password, role, captchaToken, phone, barangay });
+            const registrationPromise = registerUser({
+                firstName,
+                middleInitial,
+                lastName,
+                email,
+                password,
+                role,
+                captchaToken,
+                phone,
+                barangay,
+            });
 
             const result = await Promise.race([registrationPromise, timeoutPromise]);
 
             if (result.success) {
                 if (result.needsEmailConfirmation) {
+                    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                    setAwaitingEmailConfirmation(true);
                     setPendingEmailNotice(
-                        'Account created. Check your email and click the confirmation link, then sign in here.'
+                        'Account created. Supabase should send “Confirm your signup” to the address you entered (sender is often noreply@mail.app.supabase.io unless you use custom SMTP).\n\n' +
+                        'If nothing arrives:\n' +
+                        '• Check Spam / Promotions.\n' +
+                        `• Authentication → URL configuration: add ${origin} and ${origin}/login to Redirect URLs. Site URL should be ${origin} (or your production URL).\n` +
+                        '• Project Settings → Auth → SMTP: configure custom mail if the default is blocked by your provider.\n' +
+                        '• Logs → Auth: look for send errors after each sign-up.\n' +
+                        '• Dev only: Authentication → Providers → Email → disable “Confirm email” to skip mail and sign in immediately.\n\n' +
+                        'Use “Resend confirmation email” below if you need another copy. Then sign in on the Login page.'
                     );
                 } else {
                     setSuccess(true);
@@ -170,26 +224,57 @@ export default function SignUp() {
 
                 {/* Glassmorphism Card */}
                 <div className="glass-card p-10 relative overflow-hidden animate-slide-up delay-100" style={{ maxWidth: '440px', width: '100%' }}>
-                    {/* Subtle Glow inside card */}
-                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl"></div>
-                    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl"></div>
+                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" aria-hidden />
+                    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" aria-hidden />
 
-                    <div className="mb-6 text-center">
+                    <div className="relative z-10 mb-6 text-center">
                         <h2 className="text-xl font-black text-slate-800 tracking-tight mb-1">Join PrimeWater</h2>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Create your resident account</p>
                     </div>
 
-                    <form className="space-y-3" onSubmit={handleSubmit}>
-                        <div className="input-group">
-                            <input
-                                type="text"
-                                required
-                                placeholder="Full Name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                            />
-                            <User className="input-icon h-5 w-5" />
+                    <form className="relative z-10 space-y-3" onSubmit={handleSubmit}>
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                            <div className="input-group sm:col-span-5">
+                                <input
+                                    type="text"
+                                    name="firstName"
+                                    required
+                                    placeholder="First name"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    autoComplete="given-name"
+                                    spellCheck={false}
+                                />
+                                <User className="input-icon h-5 w-5" />
+                            </div>
+                            <div className="input-group sm:col-span-2">
+                                <input
+                                    type="text"
+                                    name="middleInitial"
+                                    placeholder="M.I. (opt.)"
+                                    title="Middle initial (optional)"
+                                    value={middleInitial}
+                                    onChange={(e) => setMiddleInitial(e.target.value.replace(/\s/g, '').slice(0, 4))}
+                                    autoComplete="additional-name"
+                                    spellCheck={false}
+                                    className="!pl-4 text-center sm:text-left"
+                                />
+                            </div>
+                            <div className="input-group sm:col-span-5">
+                                <input
+                                    type="text"
+                                    name="lastName"
+                                    required
+                                    placeholder="Last name"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    autoComplete="family-name"
+                                    spellCheck={false}
+                                />
+                                <User className="input-icon h-5 w-5" />
+                            </div>
                         </div>
+                        <p className="text-[10px] font-bold text-slate-400 -mt-1 mb-1 px-1">Middle initial is optional. One letter is shown as “X.” in your full name.</p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="input-group">
@@ -286,9 +371,26 @@ export default function SignUp() {
                         )}
 
                         {pendingEmailNotice && (
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 animate-slide-up">
-                                <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                                <p className="text-sm text-blue-800 font-medium">{pendingEmailNotice}</p>
+                            <div className="space-y-3">
+                                <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 animate-slide-up">
+                                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                                    <p className="text-sm text-blue-800 font-medium whitespace-pre-line leading-relaxed">{pendingEmailNotice}</p>
+                                </div>
+                                {awaitingEmailConfirmation && (
+                                    <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                                        <button
+                                            type="button"
+                                            onClick={handleResendConfirmation}
+                                            disabled={resendLoading}
+                                            className="px-4 py-2.5 rounded-xl bg-white border-2 border-blue-200 text-blue-700 text-xs font-black uppercase tracking-widest hover:bg-blue-50 disabled:opacity-50 transition-all"
+                                        >
+                                            {resendLoading ? 'Sending…' : 'Resend confirmation email'}
+                                        </button>
+                                        {resendInfo && (
+                                            <p className="text-xs font-bold text-emerald-700">{resendInfo}</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 

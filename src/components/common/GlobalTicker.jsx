@@ -48,12 +48,12 @@ export default function GlobalTicker() {
     if (!isVisible || activeAnnouncements.length === 0) return null;
 
     return (
-        <div className="bg-rose-600 text-white z-[999] relative flex overflow-hidden group/ticker">
+        <div className="bg-rose-600 text-white z-[999] relative flex overflow-hidden group/ticker pointer-events-none">
             <div className="absolute left-0 top-0 bottom-0 bg-rose-700 font-black text-[10px] uppercase tracking-widest px-4 flex items-center justify-center z-10 shadow-[4px_0_10px_rgba(0,0,0,0.2)]">
                 <span className="flex items-center gap-2"><Zap size={14} className="animate-pulse text-amber-300" /> SYSTEM ADVISORY</span>
             </div>
 
-            <div className="flex-1 py-1.5 overflow-hidden ml-40 mr-10">
+            <div className="flex-1 py-1.5 overflow-hidden ml-40 mr-10 pointer-events-none">
                 <div className="animate-marquee whitespace-nowrap flex items-center">
                     {activeAnnouncements.map((ann, idx) => (
                         <span key={ann.id} className="mx-8 flex items-center gap-2 text-xs font-bold font-mono tracking-tight">
@@ -73,8 +73,9 @@ export default function GlobalTicker() {
 
             {/* Dismiss Button */}
             <button
+                type="button"
                 onClick={() => setIsVisible(false)}
-                className="absolute right-0 top-0 bottom-0 px-4 bg-rose-700/50 hover:bg-rose-800 transition-colors flex items-center justify-center z-20 group-hover/ticker:opacity-100 opacity-0 md:opacity-0"
+                className="absolute right-0 top-0 bottom-0 px-4 bg-rose-700/50 hover:bg-rose-800 transition-colors flex items-center justify-center z-20 pointer-events-auto group-hover/ticker:opacity-100 opacity-0 md:opacity-0"
                 title="Dismiss Advisory"
             >
                 <X size={16} />

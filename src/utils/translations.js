@@ -94,6 +94,12 @@ export const translations = {
         urgent_action: "Urgent Action Required",
         no_incidents_match: "No incidents found matching \"{query}\"",
         resident_mgmt: "Resident Management",
+        residents_empty_no_customers: "No customer profiles are visible yet.",
+        residents_empty_rls_hint:
+            "If Auth users exist (e.g. after sign-up) but you only see yourself here, run migrations/admin_rls_expand.sql in the Supabase SQL Editor so any admin can read all profiles. Then run migrations/backfill_profiles_from_auth_users.sql once to create missing profile rows from Auth users.",
+        residents_no_match: "No residents found matching \"{query}\"",
+        residents_no_newcomers: "No residents joined in the last 30 days for this view.",
+        residents_try_search_hint: "Try another search, clear filters, or use “All residents”.",
         hub_subtitle: "Localized Hub for Malaybalay City Service Area",
         all_residents: "All Residents",
         newcomers: "Newcomers",
@@ -169,6 +175,16 @@ export const translations = {
         total_targets: "Total Targets",
         delivered: "Delivered",
         failed: "Failed",
+        delivery_zero_heading: "Why total targets are zero",
+        delivery_zero_query_error: "Could not load resident list",
+        delivery_zero_no_customers:
+            "No rows with role \"customer\" were returned from profiles. Add resident accounts, or check Supabase RLS policies so admins can read all customer profiles.",
+        delivery_zero_barangay_filter:
+            "You selected specific barangays, but no customers matched — their profile \"barangay\" field must contain the selected name (or be cleared to target everyone).",
+        delivery_zero_no_valid_phones:
+            "SMS needs a phone number with at least 8 characters on each customer profile. Update profiles in Admin → Users.",
+        delivery_zero_no_valid_emails:
+            "Email broadcast needs a valid email on each customer profile. Update profiles or ensure sign-ups store email in profiles.",
         account_profile_desc: "Barangay Resident Profile",
         first_name: "First Name",
         last_name: "Last Name",
@@ -535,6 +551,12 @@ export const translations = {
         urgent_action: "Kailangan ng Aksyon Ngayon",
         no_incidents_match: "Walang nahanap na insidente para sa \"{query}\"",
         resident_mgmt: "Pamamahala sa Residente",
+        residents_empty_no_customers: "Walang nakikitang customer profiles.",
+        residents_empty_rls_hint:
+            "Kung may Auth users pero ikaw lang ang nakikita, patakbuhin ang migrations/admin_rls_expand.sql sa Supabase SQL Editor. Pagkatapos, isang beses lang ang migrations/backfill_profiles_from_auth_users.sql para sa mga kulang na profile.",
+        residents_no_match: "Walang residente na tumugma sa \"{query}\"",
+        residents_no_newcomers: "Walang bagong residente sa nakaraang 30 araw para sa view na ito.",
+        residents_try_search_hint: "Subukan ang ibang search, i-clear ang filter, o gamitin ang “All residents”.",
         hub_subtitle: "Sentral na Hub para sa Malaybalay City Service Area",
         all_residents: "Lahat ng Residente",
         newcomers: "Mga Bago",
@@ -610,6 +632,16 @@ export const translations = {
         total_targets: "Kabuuang Target",
         delivered: "Naipadala",
         failed: "Pumalya",
+        delivery_zero_heading: "Bakit zero ang total targets",
+        delivery_zero_query_error: "Hindi na-load ang listahan ng residente",
+        delivery_zero_no_customers:
+            "Walang nakuha na may role na \"customer\" mula sa profiles. Magdagdag ng residente, o suriin ang RLS sa Supabase para makita ng admin ang lahat ng customer profiles.",
+        delivery_zero_barangay_filter:
+            "May piniling barangay pero walang tumugma — dapat tumugma ang field na \"barangay\" sa profile (o i-clear ang filter para sa lahat).",
+        delivery_zero_no_valid_phones:
+            "Kailangan ng SMS ng phone na may hindi bababa sa 8 character sa profile. I-update sa Admin → Users.",
+        delivery_zero_no_valid_emails:
+            "Kailangan ng email broadcast ng wastong email sa profile ng customer. I-update ang profiles.",
         account_profile_desc: "Profile ng Barangay Residente",
         first_name: "Pangalan",
         last_name: "Apelyido",
@@ -976,6 +1008,12 @@ export const translations = {
         urgent_action: "Kinahanglan og Aksyon Karon",
         no_incidents_match: "Walay nakit-an nga insidente alang sa \"{query}\"",
         resident_mgmt: "Pagdumala sa Residente",
+        residents_empty_no_customers: "Walay makit-an nga customer profiles.",
+        residents_empty_rls_hint:
+            "Kung dunay Auth users pero ikaw ra ang makita, i-run ang migrations/admin_rls_expand.sql sa Supabase SQL Editor. Sunod, usa ra ka higayon ang migrations/backfill_profiles_from_auth_users.sql alang sa kulang nga profile.",
+        residents_no_match: "Walay residente nga nag-match sa \"{query}\"",
+        residents_no_newcomers: "Walay bag-ong residente sa miaging 30 ka adlaw niini nga view.",
+        residents_try_search_hint: "Sulayi ang laing search, i-clear ang filter, o gamita ang “All residents”.",
         hub_subtitle: "Sentral nga Hub para sa Malaybalay City Service Area",
         all_residents: "Tanan nga Residente",
         newcomers: "Mga Bag-o",
@@ -1051,6 +1089,16 @@ export const translations = {
         total_targets: "Tanan nga Target",
         delivered: "Napadala",
         failed: "Napakyas",
+        delivery_zero_heading: "Nganong zero ang total targets",
+        delivery_zero_query_error: "Dili ma-load ang lista sa residente",
+        delivery_zero_no_customers:
+            "Walay row nga role \"customer\" nga gikan sa profiles. Pagdugang og residente, o susiha ang RLS sa Supabase aron makita sa admin ang tanan nga customer profiles.",
+        delivery_zero_barangay_filter:
+            "Adunay napiling barangay pero walay match — ang field nga \"barangay\" sa profile kinahanglan mag-match (o i-clear ang filter para sa tanan).",
+        delivery_zero_no_valid_phones:
+            "Ang SMS nanginahanglan og numero nga adunay bisan 8 ka character sa profile. I-update sa Admin → Users.",
+        delivery_zero_no_valid_emails:
+            "Ang email broadcast nanginahanglan og balido nga email sa profile. I-update ang profiles.",
         account_profile_desc: "Profile sa Residente sa Barangay",
         first_name: "Ngalan",
         last_name: "Apelyido",

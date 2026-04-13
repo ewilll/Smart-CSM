@@ -1,21 +1,30 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Droplets, Mail, ArrowRight, ArrowLeft, CheckCircle } from 'lucide-react';
-
+import { Droplets, Mail, ArrowRight, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
+import { sendPasswordResetEmail } from '../utils/auth';
 
 export default function ForgotPassword() {
     const [email, setEmail] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
         setLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            setLoading(false);
+        try {
+            const result = await sendPasswordResetEmail(email);
+            if (!result.success) {
+                setError(result.message || 'Could not send reset email.');
+                return;
+            }
             setSubmitted(true);
-        }, 1000);
+        } catch (err) {
+            setError(err?.message || 'Something went wrong. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -67,6 +76,13 @@ export default function ForgotPassword() {
                                 </div>
                             </div>
 
+                            {error && (
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                                    <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+                                    <p className="text-sm text-red-600 font-medium">{error}</p>
+                                </div>
+                            )}
+
                             <button
                                 type="submit"
                                 disabled={loading}
@@ -99,7 +115,11 @@ export default function ForgotPassword() {
                                 We've sent a password reset link to <span className="font-bold text-slate-900">{email}</span>.
                             </p>
                             <button
-                                onClick={() => setSubmitted(false)}
+                                type="button"
+                                onClick={() => {
+                                    setSubmitted(false);
+                                    setError('');
+                                }}
                                 className="text-blue-600 font-bold hover:text-blue-500 transition-colors text-sm"
                             >
                                 Didn't receive it? Try again

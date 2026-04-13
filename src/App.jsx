@@ -33,6 +33,7 @@ import GlobalTicker from './components/common/GlobalTicker';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminRoute from './components/auth/AdminRoute';
+import SupabaseAuthUrlNotice, { stashSupabaseAuthFragmentError } from './components/auth/SupabaseAuthUrlNotice';
 import { NotificationProvider } from './context/NotificationContext';
 import { PreferencesProvider } from './context/PreferencesContext';
 
@@ -41,6 +42,9 @@ function AuthHandler({ setGlobalLoading, setAuthSettled }) {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Email-confirm / magic-link failures land in the hash; strip them and surface a notice (old session may remain).
+    stashSupabaseAuthFragmentError();
+
     // SECURITY: Auto-fix any active dev overrides
     if (localStorage.getItem('smart_csm_dev_admin_override')) {
       localStorage.clear();
@@ -63,10 +67,9 @@ function AuthHandler({ setGlobalLoading, setAuthSettled }) {
         const isAuthPage = ['/login', '/signup', '/', ''].includes(window.location.pathname);
         const hasAuthIntent = !!localStorage.getItem('smart_csm_auth_intent');
 
-        // LOADING LOGIC: Only show splash for explicit login intents
-        // Normal reloads on dashboards should be 100% silent and instant
+        // LOADING LOGIC: Only show splash when there is a session to sync (never block empty /login with a full-screen overlay).
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-          if (isAuthPage) setGlobalLoading(true);
+          if (isAuthPage && session?.user) setGlobalLoading(true);
         }
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
@@ -91,16 +94,60 @@ function AuthHandler({ setGlobalLoading, setAuthSettled }) {
                   // we automatically create it as 'customer' (unless it's the Boss) to prevent login loops.
                   const isBoss = user.email === 'akazayasussy@gmail.com';
                   const pendingRole = isBoss ? 'admin' : 'customer';
+                  const displayName = (user.user_metadata?.full_name || user.email?.split('@')[0] || '').trim().replace(/\s+/g, ' ');
+                  const metaFirst = (user.user_metadata?.first_name || '').trim();
+                  const metaLast = (user.user_metadata?.last_name || '').trim();
+                  let first_name = metaFirst;
+                  let last_name = metaLast;
+                  if (!first_name || !last_name) {
+                    if (displayName) {
+                      const sp = displayName.indexOf(' ');
+                      if (sp === -1) {
+                        first_name = first_name || displayName;
+                        last_name = last_name || '';
+                      } else {
+                        first_name = first_name || displayName.slice(0, sp);
+                        last_name = last_name || displayName.slice(sp + 1).trim();
+                      }
+                    }
+                  }
+                  const metaPhone = (user.user_metadata?.phone || '').trim();
+                  const metaBarangay = (user.user_metadata?.barangay || '').trim();
 
                   const { error: insertError } = await supabase.from('profiles').insert([{
                     id: user.id,
-                    full_name: user.user_metadata.full_name || user.email.split('@')[0],
+                    full_name: displayName || user.email.split('@')[0],
+                    first_name: first_name || null,
+                    last_name: last_name || null,
+                    phone: metaPhone || null,
+                    barangay: metaBarangay || null,
                     role: pendingRole,
                     email: user.email
                   }]);
 
                   if (insertError) {
                     console.error("Profile self-healing failed:", insertError);
+                  }
+                } else if (profile) {
+                  // Older rows may have full_name only; copy phone/barangay from Auth metadata when still empty.
+                  const metaPhone = (user.user_metadata?.phone || '').trim();
+                  const metaBar = (user.user_metadata?.barangay || '').trim();
+                  const patch = {};
+                  if (metaPhone && !(profile.phone || '').trim()) patch.phone = metaPhone;
+                  if (metaBar && !(profile.barangay || '').trim()) patch.barangay = metaBar;
+                  const mfn = (user.user_metadata?.first_name || '').trim();
+                  const mln = (user.user_metadata?.last_name || '').trim();
+                  if (!(profile.first_name || '').trim() && mfn) patch.first_name = mfn;
+                  if (!(profile.last_name || '').trim() && mln) patch.last_name = mln;
+                  const fn = (profile.full_name || user.user_metadata?.full_name || '').trim().replace(/\s+/g, ' ');
+                  if (!(profile.first_name || '').trim() && !(profile.last_name || '').trim() && !patch.first_name && !patch.last_name && fn.includes(' ')) {
+                    const sp = fn.indexOf(' ');
+                    patch.first_name = fn.slice(0, sp);
+                    patch.last_name = fn.slice(sp + 1).trim();
+                  }
+                  if (Object.keys(patch).length > 0) {
+                    const { error: mergeErr } = await supabase.from('profiles').update(patch).eq('id', user.id);
+                    if (mergeErr) console.warn('Profile merge from metadata:', mergeErr.message);
                   }
                 }
 
@@ -171,51 +218,43 @@ function AuthHandler({ setGlobalLoading, setAuthSettled }) {
   return null;
 }
 
-function App() {
-  // OPTIMISTIC AUTH: If we have a local user OR we are on a public route, show routes immediately
-  const [loading, setLoading] = useState(false);
-  const [authSettled, setAuthSettled] = useState(false);
-
+/**
+ * Home, dashboards, etc. stay behind auth settlement so ProtectedRoute sees a synced session.
+ * Login / signup / forgot are NOT wrapped here so they never sit under the "Starting session" blocker.
+ */
+function MainShell({ authSettled, loading }) {
   return (
-    <Router>
-      <div className="app-container">
-        <AuthHandler setGlobalLoading={setLoading} setAuthSettled={setAuthSettled} />
+    <>
+      {!authSettled && !loading && (
+        <div className="fixed inset-0 z-[99998] flex flex-col items-center justify-center bg-slate-50 text-slate-600 gap-3">
+          <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+          <p className="text-sm font-semibold tracking-tight">Starting session…</p>
+        </div>
+      )}
 
-        {!authSettled && !loading && (
-          <div className="fixed inset-0 z-[99998] flex flex-col items-center justify-center bg-slate-50 text-slate-600 gap-3">
-            <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
-            <p className="text-sm font-semibold tracking-tight">Starting session…</p>
-          </div>
-        )}
-
-        {loading && (
-          <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-white/95 backdrop-blur-md animate-fade-in text-center p-6">
-            <div className="w-24 h-24 mb-8 relative">
-              <div className="absolute inset-0 border-4 border-blue-50 rounded-full opacity-20"></div>
-              <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-10 h-10 bg-blue-600 rounded-2xl rotate-45 animate-pulse shadow-2xl shadow-blue-500/50"></div>
-              </div>
+      {loading && (
+        <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-white/95 backdrop-blur-md animate-fade-in text-center p-6">
+          <div className="w-24 h-24 mb-8 relative">
+            <div className="absolute inset-0 border-4 border-blue-50 rounded-full opacity-20"></div>
+            <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-10 h-10 bg-blue-600 rounded-2xl rotate-45 animate-pulse shadow-2xl shadow-blue-500/50"></div>
             </div>
-            <h2 className="text-3xl font-black text-slate-800 tracking-tight mb-2">Preparing Dashboard...</h2>
-            <p className="text-slate-500 font-bold uppercase tracking-[0.3em] text-[10px] animate-pulse">Synchronizing Secure Session</p>
           </div>
-        )}
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight mb-2">Preparing Dashboard...</h2>
+          <p className="text-slate-500 font-bold uppercase tracking-[0.3em] text-[10px] animate-pulse">Synchronizing Secure Session</p>
+        </div>
+      )}
 
-
-
-        {authSettled && (
-          <PreferencesProvider>
-            <NotificationProvider>
-              <RouteErrorBoundary>
+      {authSettled && (
+        <PreferencesProvider>
+          <NotificationProvider>
+            <RouteErrorBoundary>
               <GlobalTicker />
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/services" element={<Home />} />
                 <Route path="/track" element={<TrackBill />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<SignUp />} />
-                <Route path="/forgot-password" element={<ForgotPassword />} />
 
                 {/* Protected Resident Routes */}
                 <Route path="/dashboard" element={<ProtectedRoute><UserDashboard /></ProtectedRoute>} />
@@ -247,10 +286,29 @@ function App() {
               </Routes>
               <Chatbot />
               <InstallPrompt />
-              </RouteErrorBoundary>
-            </NotificationProvider>
-          </PreferencesProvider>
-        )}
+            </RouteErrorBoundary>
+          </NotificationProvider>
+        </PreferencesProvider>
+      )}
+    </>
+  );
+}
+
+function App() {
+  const [loading, setLoading] = useState(false);
+  const [authSettled, setAuthSettled] = useState(false);
+
+  return (
+    <Router>
+      <div className="app-container">
+        <AuthHandler setGlobalLoading={setLoading} setAuthSettled={setAuthSettled} />
+        <SupabaseAuthUrlNotice />
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="*" element={<MainShell authSettled={authSettled} loading={loading} />} />
+        </Routes>
       </div>
     </Router>
   );

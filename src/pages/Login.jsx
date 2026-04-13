@@ -118,23 +118,27 @@ export default function Login() {
 
                 {/* Glassmorphism Card */}
                 <div className="glass-card p-10 relative overflow-hidden animate-slide-up delay-100" style={{ maxWidth: '440px', width: '100%' }}>
-                    {/* Subtle Glow inside card */}
-                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl"></div>
-                    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl"></div>
+                    {/* Subtle Glow inside card — must not capture clicks above the form */}
+                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" aria-hidden />
+                    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" aria-hidden />
 
-                    <div className="mb-8 text-center">
+                    <div className="relative z-10 mb-8 text-center">
                         <h2 className="text-xl font-black text-slate-800 tracking-tight mb-1">Welcome Back</h2>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sign in to your account</p>
                     </div>
 
-                    <form className="space-y-3" onSubmit={handleSubmit}>
+                    <form className="relative z-10 space-y-3" onSubmit={handleSubmit}>
                         <div className="input-group">
                             <input
                                 type="email"
+                                name="email"
                                 required
                                 placeholder="Email Address"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                autoComplete="email"
+                                spellCheck={false}
+                                autoCapitalize="none"
                             />
                             <Mail className="input-icon h-5 w-5" />
                         </div>
@@ -142,11 +146,15 @@ export default function Login() {
                         <div className="input-group">
                             <input
                                 type={showPassword ? "text" : "password"}
+                                name="password"
                                 required
                                 placeholder="Password"
                                 className="pr-12"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
+                                autoComplete="current-password"
+                                spellCheck={false}
+                                autoCapitalize="none"
                             />
                             <Lock className="input-icon h-5 w-5" />
                             <button

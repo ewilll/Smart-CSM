@@ -87,6 +87,72 @@ function filterCustomersByBarangay(rows, selectedNames) {
     });
 }
 
+/**
+ * Prefer a real name; avoid showing numeric-only full_name (often a mistaken account_no).
+ * Fall back to email local-part so Auth-only users still read sensibly in the admin grid.
+ */
+function residentDisplayName(profile) {
+    const fn = (profile?.full_name || '').trim();
+    if (fn && !/^\d+$/.test(fn)) return fn;
+    const local = (profile?.email || '').split('@')[0]?.trim();
+    if (local) return local.charAt(0).toUpperCase() + local.slice(1);
+    return 'Anonymous Resident';
+}
+
+function residentNameInitial(profile) {
+    const n = residentDisplayName(profile);
+    return (n[0] || '?').toUpperCase();
+}
+
+/** Split "Edo Molatch" → first / last for rows that only store full_name. */
+function splitFullNameParts(fullName) {
+    const t = String(fullName || '').trim().replace(/\s+/g, ' ');
+    if (!t) return { first: '', last: '' };
+    const i = t.indexOf(' ');
+    if (i === -1) return { first: t, last: '' };
+    return { first: t.slice(0, i), last: t.slice(i + 1).trim() };
+}
+
+function profileFirstName(p) {
+    const v = (p?.first_name || '').trim();
+    if (v) return v;
+    return splitFullNameParts(p?.full_name).first;
+}
+
+function profileLastName(p) {
+    const v = (p?.last_name || '').trim();
+    if (v) return v;
+    return splitFullNameParts(p?.full_name).last;
+}
+
+function profilePhoneDisplay(p) {
+    const v = (p?.phone || '').trim();
+    return v || '';
+}
+
+/** Human-readable causes when SMS/email total targets are 0 (translation keys). */
+function deliveryZeroRecipientHintKeys({ rawRecipients, targeted, target_barangays, send_sms, send_email, withPhone, withEmail }) {
+    const keys = [];
+    const nRaw = (rawRecipients || []).length;
+    const nTargeted = (targeted || []).length;
+    const barangayOn = (target_barangays || []).length > 0;
+
+    if (nRaw === 0) {
+        keys.push('delivery_zero_no_customers');
+        return keys;
+    }
+    if (barangayOn && nTargeted === 0) {
+        keys.push('delivery_zero_barangay_filter');
+    }
+    if (send_sms && withPhone.length === 0 && nTargeted > 0) {
+        keys.push('delivery_zero_no_valid_phones');
+    }
+    if (send_email && withEmail.length === 0 && nTargeted > 0) {
+        keys.push('delivery_zero_no_valid_emails');
+    }
+    return keys;
+}
+
 export default function AdminDashboard() {
     // Sync with session already validated by AdminRoute — avoids a blank first paint (`return null` until useEffect).
     const [user, setUser] = useState(() => getCurrentUser());
@@ -115,7 +181,7 @@ export default function AdminDashboard() {
     const [notification, setNotification] = useState(null);
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
     const [editModal, setEditModal] = useState({ isOpen: false, user: null });
-    const [editForm, setEditForm] = useState({ full_name: '', role: 'customer' });
+    const [editForm, setEditForm] = useState({ full_name: '', first_name: '', last_name: '', phone: '', barangay: '', role: 'customer' });
 
     // --- NEW: Profile Management State ---
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -296,7 +362,7 @@ export default function AdminDashboard() {
 
             supabase.channel('admin_users').on('postgres_changes', { event: '*', table: 'profiles' }, (payload) => {
                 if (payload.eventType === 'INSERT') {
-                    addPulse('New Citizen', `${payload.new.full_name} joined the platform.`, 'user');
+                    addPulse('New Citizen', `${residentDisplayName(payload.new)} joined the platform.`, 'user');
                 }
                 fetchUsers();
             }).subscribe(),
@@ -321,6 +387,12 @@ export default function AdminDashboard() {
         return () => channels.forEach(c => supabase.removeChannel(c));
     }, [page, filterType, incidentFilter]);
 
+    useEffect(() => {
+        if (!isAuthenticated()) return;
+        if (getCurrentUser()?.role !== 'admin') return;
+        fetchUsers();
+    }, [userPage]);
+
     const addPulse = (title, message, type) => {
         const id = Math.random().toString(36).substring(7);
         setPulseFeed(prev => [{ id, title, message, type, time: new Date() }, ...prev].slice(0, 10));
@@ -338,27 +410,44 @@ export default function AdminDashboard() {
     };
 
     const fetchUsers = async () => {
+        // Residents tab is for customers only; admins should not appear as resident cards.
         const { data, error, count } = await supabase
             .from('profiles')
             .select('*', { count: 'exact' })
+            .eq('role', 'customer')
             .range(userPage * PAGE_SIZE, (userPage + 1) * PAGE_SIZE - 1)
             .order('full_name', { ascending: true });
 
+        if (error) {
+            console.warn('[admin fetchUsers]', error.message);
+            setUsers([]);
+            return;
+        }
+
         if (data) {
             setUsers(data);
-            setUserStats(prev => ({ ...prev, total: count || 0 }));
-            // Also need total counts for stats regardless of page
-            const { data: allUsers } = await supabase.from('profiles').select('role, created_at');
-            if (allUsers) {
-                const admins = allUsers.filter(u => u.role === 'admin').length;
-                const recent = allUsers.filter(u => {
+            const customerTotal = count ?? data.length;
+            const { data: roleRows, error: roleErr } = await supabase.from('profiles').select('role, created_at');
+            if (roleErr) {
+                console.warn('[admin fetchUsers stats]', roleErr.message);
+                setUserStats((prev) => ({ ...prev, total: customerTotal }));
+            } else if (roleRows) {
+                const admins = roleRows.filter((u) => u.role === 'admin').length;
+                const recent = roleRows.filter((u) => {
+                    if (u.role !== 'customer') return false;
                     const dayDiff = (new Date() - new Date(u.created_at)) / (1000 * 60 * 60 * 24);
                     return dayDiff <= 30;
                 }).length;
-                setUserStats({ total: count || allUsers.length, admins, recent });
+                setUserStats({ total: customerTotal, admins, recent });
+            } else {
+                setUserStats((prev) => ({ ...prev, total: customerTotal }));
             }
-            const currentAdmin = data.find(u => u.id === user?.id);
-            if (currentAdmin) setAdminProfile(currentAdmin);
+        }
+
+        const adminId = getCurrentUser()?.id;
+        if (adminId) {
+            const { data: adminRow } = await supabase.from('profiles').select('*').eq('id', adminId).maybeSingle();
+            if (adminRow) setAdminProfile(adminRow);
         }
     };
 
@@ -445,10 +534,13 @@ export default function AdminDashboard() {
 
             let successMessage = 'Announcement published successfully!';
 
-            const { data: rawRecipients } = await supabase
+            const { data: rawRecipients, error: recipientsError } = await supabase
                 .from('profiles')
                 .select('id, role, phone, email, barangay, full_name')
                 .eq('role', 'customer');
+            if (recipientsError) {
+                console.warn('[broadcast] profiles fetch:', recipientsError);
+            }
 
             const targeted = filterCustomersByBarangay(rawRecipients, target_barangays);
             const withPhone = targeted.filter((u) => u.phone && String(u.phone).trim().length >= 8);
@@ -487,6 +579,20 @@ export default function AdminDashboard() {
             }
 
             if (send_sms || send_email) {
+                const zeroSms = send_sms && withPhone.length === 0;
+                const zeroEmail = send_email && withEmail.length === 0;
+                const zeroHintKeys =
+                    zeroSms || zeroEmail
+                        ? deliveryZeroRecipientHintKeys({
+                              rawRecipients,
+                              targeted,
+                              target_barangays,
+                              send_sms,
+                              send_email,
+                              withPhone,
+                              withEmail,
+                          })
+                        : [];
                 setDeliveryReport({
                     announcement: dbPayload,
                     sms: send_sms
@@ -504,6 +610,8 @@ export default function AdminDashboard() {
                           }
                         : null,
                     timestamp: new Date().toISOString(),
+                    zeroRecipientHintKeys: zeroHintKeys,
+                    recipientsQueryError: recipientsError?.message || null,
                 });
                 successMessage = 'Alert published! See delivery report for SMS/email totals.';
             }
@@ -865,10 +973,12 @@ export default function AdminDashboard() {
     };
 
     const openEditModal = (user) => {
+        const parts = splitFullNameParts(user.full_name);
         setEditForm({
             full_name: user.full_name || '',
-            first_name: user.first_name || '',
-            last_name: user.last_name || '',
+            first_name: (user.first_name || '').trim() || parts.first,
+            last_name: (user.last_name || '').trim() || parts.last,
+            phone: (user.phone || '').trim(),
             barangay: user.barangay || '',
             role: user.role
         });
@@ -889,6 +999,7 @@ export default function AdminDashboard() {
             ...editForm,
             first_name: editForm.first_name.trim(),
             last_name: editForm.last_name.trim(),
+            phone: (editForm.phone || '').trim(),
             barangay: editForm.barangay.trim(),
             full_name: `${editForm.first_name.trim()} ${editForm.last_name.trim()}`
         };
@@ -916,7 +1027,7 @@ export default function AdminDashboard() {
 
             // Auto-refresh list if role changed
             if (sanitizedForm.role !== editModal.user.role) {
-                fetchUsers(userPage);
+                fetchUsers();
             }
         } catch (err) {
             console.error('Error updating user:', err);
@@ -1246,11 +1357,16 @@ export default function AdminDashboard() {
                                                     </div>
                                                 ))
                                             ) : (() => {
-                                                const filtered = users.filter(u => {
+                                                const filtered = users
+                                                    .filter((u) => u.role === 'customer')
+                                                    .filter((u) => {
                                                     const searchLower = searchQuery.toLowerCase();
+                                                    const dn = residentDisplayName(u).toLowerCase();
                                                     const matchesSearch =
+                                                        dn.includes(searchLower) ||
                                                         (u.full_name || '').toLowerCase().includes(searchLower) ||
                                                         (u.email || '').toLowerCase().includes(searchLower) ||
+                                                        (u.account_no || '').toLowerCase().includes(searchLower) ||
                                                         (u.barangay || '').toLowerCase().includes(searchLower);
 
                                                     if (filterType === 'new') {
@@ -1261,11 +1377,29 @@ export default function AdminDashboard() {
                                                 });
 
                                                 if (filtered.length === 0) {
+                                                    const noCustomersLoaded = users.length === 0 && !searchQuery.trim();
                                                     return (
-                                                        <div className="md:col-span-3 py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100 text-center">
+                                                        <div className="md:col-span-3 py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100 text-center px-6">
                                                             <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                                                            <p className="text-slate-400 font-bold">No residents found matching "{searchQuery}"</p>
-                                                            <p className="text-[10px] text-slate-300 uppercase tracking-widest mt-2">Try searching by Name or Barangay</p>
+                                                            {noCustomersLoaded ? (
+                                                                <>
+                                                                    <p className="text-slate-600 font-bold mb-2">{t('residents_empty_no_customers')}</p>
+                                                                    <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-lg mx-auto">
+                                                                        {t('residents_empty_rls_hint')}
+                                                                    </p>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <p className="text-slate-400 font-bold">
+                                                                        {searchQuery.trim()
+                                                                            ? t('residents_no_match', { query: searchQuery })
+                                                                            : t('residents_no_newcomers')}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-300 uppercase tracking-widest mt-2">
+                                                                        {t('residents_try_search_hint')}
+                                                                    </p>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     );
                                                 }
@@ -1275,11 +1409,11 @@ export default function AdminDashboard() {
                                                         <div className="flex justify-between items-start mb-6">
                                                             <div className="flex items-center gap-4">
                                                                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-500/20">
-                                                                    {(u.full_name || '?')[0].toUpperCase()}
+                                                                    {residentNameInitial(u)}
                                                                 </div>
                                                                 <div>
                                                                     <h4 className="text-lg font-black text-slate-800 leading-tight group-hover:text-blue-600 transition-colors">
-                                                                        {u.full_name || 'Anonymous Resident'}
+                                                                        {residentDisplayName(u)}
                                                                     </h4>
                                                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
                                                                         {u.barangay || 'Area Unspecified'}
@@ -1821,10 +1955,10 @@ export default function AdminDashboard() {
                                 <div className="flex justify-between items-start mb-10">
                                     <div className="flex items-center gap-6">
                                         <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-blue-500/30">
-                                            {(selectedUserProfile.full_name || selectedUserProfile.email)[0].toUpperCase()}
+                                            {residentNameInitial(selectedUserProfile)}
                                         </div>
                                         <div>
-                                            <h3 className="text-4xl font-black text-slate-800 tracking-tight">{selectedUserProfile.full_name || 'Anonymous Resident'}</h3>
+                                            <h3 className="text-4xl font-black text-slate-800 tracking-tight">{residentDisplayName(selectedUserProfile)}</h3>
                                             <p className="text-lg text-slate-500 font-bold mt-1">{selectedUserProfile.email}</p>
                                             <div className="flex items-center gap-3 mt-3">
                                                 <span className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded-xl ${selectedUserProfile.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{selectedUserProfile.role}</span>
@@ -1840,15 +1974,27 @@ export default function AdminDashboard() {
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-10">
                                     <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-3xl border border-slate-100">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><User size={12} /> First Name</p>
-                                        <p className="font-black text-xl text-slate-700">{selectedUserProfile.first_name || 'Not set'}</p>
+                                        <p className="font-black text-xl text-slate-700">{profileFirstName(selectedUserProfile) || 'Not set'}</p>
+                                        {!selectedUserProfile.first_name?.trim() && profileFirstName(selectedUserProfile) && (
+                                            <p className="text-[9px] font-bold text-slate-400 mt-1">From full name</p>
+                                        )}
                                     </div>
                                     <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-3xl border border-slate-100">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><User size={12} /> Last Name</p>
-                                        <p className="font-black text-xl text-slate-700">{selectedUserProfile.last_name || 'Not set'}</p>
+                                        <p className="font-black text-xl text-slate-700">{profileLastName(selectedUserProfile) || 'Not set'}</p>
+                                        {!selectedUserProfile.last_name?.trim() && profileLastName(selectedUserProfile) && (
+                                            <p className="text-[9px] font-bold text-slate-400 mt-1">From full name</p>
+                                        )}
                                     </div>
                                     <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-3xl border border-slate-100 md:col-span-1 col-span-2">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><Phone size={12} /> Contact Path</p>
-                                        <p className="font-black text-xl text-slate-700">{selectedUserProfile.phone || 'No phone set'}</p>
+                                        <p className="font-black text-xl text-slate-700">{profilePhoneDisplay(selectedUserProfile) || 'No phone set'}</p>
+                                        {!profilePhoneDisplay(selectedUserProfile) && (
+                                            <p className="text-[9px] font-bold text-slate-400 mt-1 leading-snug">
+                                                Not in database yet — use Edit on the resident card, or run{' '}
+                                                <span className="font-mono text-[8px]">profiles_sync_contact_from_auth.sql</span> if the number exists in Auth metadata.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -2192,6 +2338,16 @@ export default function AdminDashboard() {
                                         />
                                     </div>
                                     <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Phone (SMS / contact)</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.phone}
+                                            onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                            className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300"
+                                            placeholder="09XXXXXXXXX"
+                                        />
+                                    </div>
+                                    <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Display Name Reference</label>
                                         <input
                                             type="text"
@@ -2481,6 +2637,24 @@ export default function AdminDashboard() {
                                                 </span>
                                                 <span className="font-black text-rose-600">{deliveryReport.failedCount}</span>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {(deliveryReport.zeroRecipientHintKeys?.length > 0 || deliveryReport.recipientsQueryError) && (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left">
+                                            <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-2">
+                                                {t('delivery_zero_heading')}
+                                            </p>
+                                            <ul className="list-disc pl-4 space-y-1.5 text-xs font-semibold text-amber-950 leading-snug">
+                                                {deliveryReport.recipientsQueryError && (
+                                                    <li>
+                                                        {t('delivery_zero_query_error')}: {deliveryReport.recipientsQueryError}
+                                                    </li>
+                                                )}
+                                                {(deliveryReport.zeroRecipientHintKeys || []).map((key) => (
+                                                    <li key={key}>{t(key)}</li>
+                                                ))}
+                                            </ul>
                                         </div>
                                     )}
                                 </div>

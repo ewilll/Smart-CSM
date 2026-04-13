@@ -30,13 +30,25 @@ CREATE POLICY "Admins can update profiles" ON public.profiles
     USING ( public.is_admin() )
     WITH CHECK ( public.is_admin() );
 
--- Announcements / messages: same pattern
-DROP POLICY IF EXISTS "Admins can manage announcements" ON public.announcements;
-CREATE POLICY "Admins can manage announcements" ON public.announcements
-    FOR ALL TO authenticated
-    USING ( public.is_admin() );
+-- Announcements / messages: same pattern (only if those tables exist — run
+-- communications_migration.sql or create_missing_tables.sql first if you need them).
 
-DROP POLICY IF EXISTS "Admins can view all messages" ON public.messages;
-CREATE POLICY "Admins can view all messages" ON public.messages
-    FOR ALL TO authenticated
-    USING ( public.is_admin() );
+DO $announce$
+BEGIN
+  IF to_regclass('public.announcements') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "Admins can manage announcements" ON public.announcements;
+    CREATE POLICY "Admins can manage announcements" ON public.announcements
+        FOR ALL TO authenticated
+        USING ( public.is_admin() );
+  END IF;
+END $announce$;
+
+DO $msg$
+BEGIN
+  IF to_regclass('public.messages') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "Admins can view all messages" ON public.messages;
+    CREATE POLICY "Admins can view all messages" ON public.messages
+        FOR ALL TO authenticated
+        USING ( public.is_admin() );
+  END IF;
+END $msg$;
