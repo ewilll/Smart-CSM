@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { supabase } from './utils/supabaseClient';
-import { getCurrentUser } from './utils/auth';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
@@ -202,7 +201,7 @@ function AuthHandler({ setGlobalLoading, setAuthSettled }) {
           setAuthSettled(true);
           clearTimeout(safetyTimer);
         }
-      } catch (error) {
+      } catch {
         setAuthSettled(true);
         setGlobalLoading(false);
         clearTimeout(safetyTimer);
