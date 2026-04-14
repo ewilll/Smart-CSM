@@ -3,11 +3,9 @@ from pydantic import BaseModel
 import joblib
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from dotenv import load_dotenv
+from env_loader import load_smart_csm_dotenv
 
-# Load Smart-CSM/.env (parent of server_ai/) for HTTPSMS + Gmail keys
-_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(_env_path)
+load_smart_csm_dotenv()
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Optional

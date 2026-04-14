@@ -2,13 +2,11 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
-from pathlib import Path
 
 try:
-    from dotenv import load_dotenv
+    from env_loader import load_smart_csm_dotenv
 
-    # Smart-CSM/.env (parent of server_ai/)
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
+    load_smart_csm_dotenv()
 except ImportError:
     pass
 
