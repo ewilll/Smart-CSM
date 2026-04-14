@@ -93,7 +93,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
     return (
         <>
-            <aside className={`sidebar ${isOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''} bg-white dark:bg-slate-800 shadow-2xl shadow-blue-900/5 dark:shadow-black/40`}>
+            <aside className={`sidebar ${isOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''} bg-slate-50 dark:bg-slate-800 shadow-2xl shadow-blue-900/5 dark:shadow-black/40`}>
                 <div className="sidebar-header">
                     <div
                         onClick={() => handleNav(isAdmin ? '/admin' : '/dashboard')}
@@ -103,7 +103,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                             <Droplets size={20} className="text-white" />
                         </div>
                         <span className="brand-title !text-2xl transition-all duration-300">
-                            <span className="text-slate-900 dark:text-slate-100">Prime</span>
+                            <span className="text-slate-800 dark:text-slate-100">Prime</span>
                             <span className="text-blue-600 dark:text-blue-400">Water</span>
                         </span>
                     </div>
@@ -124,7 +124,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
                 <nav className="sidebar-nav space-y-6 mt-8 flex-1 overflow-y-auto custom-scrollbar pr-2">
                     <div className="nav-section">
-                        <span className="nav-label px-6 mb-4 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{t('main_menu')}</span>
+                        <span className="nav-label px-6 mb-4 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 dark:text-slate-400">{t('main_menu')}</span>
                         <div className="space-y-2 px-3">
                             {/* SHARED OR ROLE-SPECIFIC DASHBOARD */}
                             <div

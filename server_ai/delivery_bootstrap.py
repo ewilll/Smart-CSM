@@ -61,7 +61,9 @@ def _split_sql_statements(sql: str) -> list[str]:
 
 
 def run_delivery_logs_bootstrap_sync() -> None:
-    url = os.getenv("SUPABASE_DB_URL", "").strip() or os.getenv("DATABASE_URL", "").strip()
+    url = (os.getenv("SUPABASE_DB_URL", "").strip()
+           or os.getenv("SUPABASE_DATABASE_URL", "").strip()
+           or os.getenv("DATABASE_URL", "").strip())
     if not url:
         print(
             "[delivery_logs] Auto-bootstrap skipped: set SUPABASE_DB_URL (Postgres URI from "

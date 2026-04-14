@@ -3,7 +3,12 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const PreferencesContext = createContext({});
 
 export function PreferencesProvider({ children }) {
-    const [theme, setTheme] = useState(localStorage.getItem('smart_csm_theme') || 'light');
+    const getInitialTheme = () => {
+        const savedTheme = localStorage.getItem('smart_csm_theme') || 'light';
+        return ['light', 'dark'].includes(savedTheme) ? savedTheme : 'light';
+    };
+
+    const [theme, setTheme] = useState(getInitialTheme);
     const [language, setLanguage] = useState(localStorage.getItem('smart_csm_language') || 'EN');
     const [font, setFont] = useState(localStorage.getItem('smart_csm_font') || 'inter');
 
@@ -14,7 +19,7 @@ export function PreferencesProvider({ children }) {
         // Handle Theme
         root.classList.remove('theme-light', 'theme-dark', 'theme-dim', 'theme-oled');
         root.classList.add(`theme-${theme}`);
-        if (theme === 'dark' || theme === 'oled') {
+        if (theme === 'dark') {
             root.classList.add('dark');
         } else {
             root.classList.remove('dark');

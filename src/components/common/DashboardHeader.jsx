@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, ChevronDown, X, MessageSquare, Settings, Clock, AlertCircle, Info, CheckCircle2, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Search, Bell, ChevronDown, X, MessageSquare, Settings, Clock, AlertCircle, Info, CheckCircle2, MoreHorizontal, Trash2, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProfileManagementModal from '../modals/ProfileManagementModal';
 import { useNotifications } from '../../context/NotificationContext';
@@ -38,7 +38,7 @@ export default function DashboardHeader({
     const [internalShowNotifications, setInternalShowNotifications] = useState(false);
 
     // Unified state logic
-    const { language, theme } = usePreferences() || { language: 'EN', theme: 'light' };
+    const { language, theme, setTheme } = usePreferences() || { language: 'EN', theme: 'light', setTheme: () => { } };
     const { t } = useTranslation(language);
 
     const showNotifications = controlledShowNotifications !== undefined
@@ -100,6 +100,10 @@ export default function DashboardHeader({
         }
     };
 
+    const toggleTheme = () => {
+        setTheme(theme === 'dark' ? 'light' : 'dark');
+    };
+
     return (
         <>
             <div className="header-container mb-12 space-y-8">
@@ -109,7 +113,7 @@ export default function DashboardHeader({
                         {/* User Profile - LEFT */}
                         <div
                             onClick={() => setIsProfileModalOpen(true)}
-                            className="user-profile pl-2 pr-6 h-14 flex items-center gap-4 bg-white/90 dark:bg-slate-800/95 backdrop-blur-md dark:backdrop-blur-none rounded-2xl border border-slate-200/80 dark:border-slate-600 shadow-lg cursor-pointer hover:bg-white dark:hover:bg-slate-800 hover:scale-[1.02] transition-all group"
+                            className="user-profile pl-2 pr-6 h-14 flex items-center gap-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-300 dark:border-slate-600 shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 hover:scale-[1.02] transition-all group"
                         >
                             <img
                                 src={user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=0D8ABC&color=fff`}
@@ -117,23 +121,32 @@ export default function DashboardHeader({
                                 className="avatar w-10 h-10 ring-4 ring-white dark:ring-slate-700 group-hover:ring-blue-100 dark:group-hover:ring-blue-900/50 transition-all rounded-full object-cover"
                             />
                             <div className="hidden md:block text-left">
-                                <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-none mb-1">
+                                <p className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest leading-none mb-1">
                                     {user.role === 'admin' ? t('admin') : t('resident')}
                                 </p>
                                 <p className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-none group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                                     {user.name}
                                 </p>
                             </div>
-                            <ChevronDown size={16} className="text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+                            <ChevronDown size={16} className="text-slate-600 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
                         </div>
 
                         {/* Settings Button */}
                         <button
                             onClick={handleSettingsClick}
-                            className="icon-btn w-14 h-14 relative bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-2xl shadow-lg hover:bg-white dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 hover:scale-110 active:scale-95 transition-all flex items-center justify-center group"
+                            className="icon-btn w-14 h-14 relative bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 hover:scale-110 active:scale-95 transition-all flex items-center justify-center group"
                             title="Settings"
                         >
                             <Settings size={22} className="group-hover:rotate-90 transition-transform duration-500" />
+                        </button>
+
+                        {/* Theme Toggle */}
+                        <button
+                            onClick={toggleTheme}
+                            className="icon-btn w-14 h-14 relative bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 hover:scale-110 active:scale-95 transition-all flex items-center justify-center"
+                            title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+                        >
+                            {theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}
                         </button>
 
                         {/* Notification Bell */}

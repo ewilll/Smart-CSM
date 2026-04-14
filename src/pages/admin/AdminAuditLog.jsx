@@ -178,7 +178,7 @@ export default function AdminAuditLog() {
     return (
         <div className="dashboard-layout">
             <Sidebar isOpen={false} toggleSidebar={() => { }} />
-            <main className="dashboard-main overflow-hidden h-screen flex flex-col relative bg-slate-50">
+            <main className="dashboard-main overflow-hidden h-screen flex flex-col relative">
                 <DashboardHeader
                     user={user}
                     onUpdateUser={setUser}

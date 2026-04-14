@@ -2,6 +2,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --animate-blink: blink 3s infinite;
   --animate-wave-left: wave-left 3s infinite ease-in-out;
@@ -113,11 +115,11 @@
 
 
 :root {
-  /* Brand Colors - Water Theme - Vibrant & Professional */
+  /* Brand Colors */
   --primary-blue: #2563eb;
   --secondary-blue: #1e40af;
   --primary-dark: #0f172a;
-  --primary-light: #f8fafc;
+  --primary-light: #eef2f7;
   --accent-blue: #3b82f6;
   --accent-cyan: #06b6d4;
   --accent-orange: #f97316;
@@ -125,24 +127,24 @@
   --sidebar-collapsed-width: 100px;
   --active-sidebar-width: 280px;
   /* Updated dynamically by Sidebar.jsx */
-  /* Solid enough for readable nav; was referenced but undefined (transparent + blur = “glass” ghost) */
-  --sidebar-glass: rgba(255, 255, 255, 0.98);
+  /* Solid enough for readable nav; was referenced but undefined (transparent + blur = "glass" ghost) */
+  --sidebar-glass: rgba(248, 250, 252, 0.98);
 
   /* UI Colors */
   --bg-dark: #020617;
-  --bg-white: #ffffff;
-  --bg-card: rgba(255, 255, 255, 0.7);
-  --text-main: #1e293b;
-  --text-muted: #475569;
+  --bg-white: #f8fafc;
+  --bg-card: rgba(248, 250, 252, 0.92);
+  --text-main: #0f172a;
+  --text-muted: #334155;
   /* Darkened from Slate 500 to 600 for readability */
-  --border-light: rgba(226, 232, 240, 1);
+  --border-light: rgba(203, 213, 225, 1);
   --border-premium: rgba(37, 99, 235, 0.2);
-  --shadow-premium: 0 20px 30px -5px rgba(37, 99, 235, 0.1), 0 10px 15px -6px rgba(37, 99, 235, 0.1);
+  --shadow-premium: 0 6px 16px rgba(15, 23, 42, 0.08);
 
   /* Glassmorphism Evolution - Increased Opacity for Text Clarity */
-  --glass-bg: rgba(255, 255, 255, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.8);
-  --glass-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.1);
+  --glass-bg: rgba(248, 250, 252, 0.94);
+  --glass-border: rgba(226, 232, 240, 0.92);
+  --glass-shadow: 0 4px 16px 0 rgba(15, 23, 42, 0.08);
 
   /* Animated Mesh Gradient (Vibrant Water Theme) */
   --mesh-gradient:
@@ -190,21 +192,46 @@ body {
   transition: background-color 0.5s ease, color 0.5s ease;
 }
 
+html.theme-light {
+  --primary-light: #eef2f7;
+  --bg-white: #f8fafc;
+  --bg-card: rgba(248, 250, 252, 0.92);
+  --text-main: #0f172a;
+  --text-muted: #334155;
+  --border-light: rgba(203, 213, 225, 1);
+  --glass-bg: rgba(248, 250, 252, 0.94);
+  --glass-border: rgba(226, 232, 240, 0.92);
+}
+
+/* Improve readability in light mode for muted utility text */
+html.theme-light .text-slate-300 {
+  color: #94a3b8 !important;
+}
+
+html.theme-light .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.theme-light .text-slate-500 {
+  color: #475569 !important;
+}
+
 /* Dark Mode Overrides */
 html.dark {
-  --sidebar-glass: #1e293b;
-  --glass-bg: rgba(30, 41, 59, 0.94);
-  --glass-border: rgba(148, 163, 184, 0.22);
+  --primary-light: #0b1220;
+  --bg-white: #111827;
+  --bg-card: rgba(17, 24, 39, 0.95);
+  --text-main: #f3f4f6;
+  --text-muted: #d1d5db;
+  --border-light: rgba(75, 85, 99, 0.8);
+  --sidebar-glass: #111827;
+  --glass-bg: rgba(17, 24, 39, 0.95);
+  --glass-border: rgba(75, 85, 99, 0.6);
 }
 
 html.dark body {
-  background: #0f172a;
-  color: #f8fafc;
-}
-
-html.theme-oled body {
-  background: #000000;
-  color: #ffffff;
+  background: #0b1220;
+  color: #f3f4f6;
 }
 
 /* Theme overrides for Glass cards when Dark mode is active */
@@ -248,16 +275,13 @@ html.dark .search-input {
 }
 
 html.dark .dashboard-layout {
-  background: #0f172a !important;
-  color: #e2e8f0;
+  background: var(--primary-light) !important;
+  color: var(--text-main);
 }
 
 html.dark .sidebar {
-  background: var(--sidebar-glass) !important;
-  border-color: rgba(148, 163, 184, 0.22) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+  background: var(--bg-white) !important;
+  border-color: var(--border-light) !important;
 }
 
 html.dark .sidebar .brand-title,
@@ -282,18 +306,182 @@ html.dark .sidebar .nav-item.active {
   color: white !important;
 }
 
-html.theme-oled .dashboard-layout,
-html.theme-oled .floating-card,
-html.theme-oled .sidebar,
-html.theme-oled .header-container {
-  background: #000000 !important;
-  border-color: #1a1a1a !important;
+/* ============================================
+   COMPREHENSIVE DARK MODE OVERRIDES
+   Catches all hardcoded light-only Tailwind
+   classes across all dashboard pages.
+   ============================================ */
+
+/* White/light backgrounds → dark */
+html.dark .bg-white {
+  background-color: #1e293b !important;
 }
 
-html.theme-oled .sidebar {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+html.dark .bg-slate-50 {
+  background-color: #111827 !important;
 }
+
+html.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+/* Light borders → dark */
+html.dark .border-slate-50 {
+  border-color: #374151 !important;
+}
+
+html.dark .border-slate-100 {
+  border-color: #374151 !important;
+}
+
+html.dark .border-slate-200 {
+  border-color: #4b5563 !important;
+}
+
+html.dark .border-slate-300 {
+  border-color: #6b7280 !important;
+}
+
+html.dark .divide-slate-100 > * + * {
+  border-color: #374151 !important;
+}
+
+html.dark .divide-slate-200 > * + * {
+  border-color: #4b5563 !important;
+}
+
+/* Dark text → light text */
+html.dark .text-slate-900 {
+  color: #f3f4f6 !important;
+}
+
+html.dark .text-slate-800 {
+  color: #e5e7eb !important;
+}
+
+html.dark .text-slate-700 {
+  color: #d1d5db !important;
+}
+
+html.dark .text-slate-600 {
+  color: #9ca3af !important;
+}
+
+html.dark .text-slate-500 {
+  color: #9ca3af !important;
+}
+
+/* Muted/faded text → lighter */
+html.dark .text-slate-400 {
+  color: #9ca3af !important;
+}
+
+html.dark .text-slate-300 {
+  color: #d1d5db !important;
+}
+
+html.dark .text-slate-200 {
+  color: #e5e7eb !important;
+}
+
+/* Input/form elements in dark mode */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #1e293b;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6b7280;
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  background-color: #111827;
+  border-color: #3b82f6;
+}
+
+/* Table headers */
+html.dark .bg-slate-50 th,
+html.dark thead.bg-slate-50 {
+  background-color: #1e293b !important;
+}
+
+/* Hover states */
+html.dark .hover\:bg-slate-50:hover {
+  background-color: #374151 !important;
+}
+
+html.dark .hover\:bg-slate-100:hover {
+  background-color: #374151 !important;
+}
+
+html.dark .hover\:bg-white:hover {
+  background-color: #374151 !important;
+}
+
+html.dark .hover\:bg-slate-200:hover {
+  background-color: #4b5563 !important;
+}
+
+/* Semi-transparent light backgrounds */
+html.dark .bg-white\/50 {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+html.dark .bg-white\/90 {
+  background-color: rgba(30, 41, 59, 0.9) !important;
+}
+
+html.dark .bg-slate-50\/50 {
+  background-color: rgba(17, 24, 39, 0.5) !important;
+}
+
+html.dark .bg-slate-50\/80 {
+  background-color: rgba(17, 24, 39, 0.8) !important;
+}
+
+/* Semantic light backgrounds → dark variants */
+html.dark .bg-blue-50 {
+  background-color: rgba(37, 99, 235, 0.15) !important;
+}
+
+html.dark .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.15) !important;
+}
+
+html.dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+}
+
+html.dark .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+}
+
+html.dark .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+/* Colored borders in dark mode */
+html.dark .border-blue-100 { border-color: rgba(37, 99, 235, 0.3) !important; }
+html.dark .border-rose-100 { border-color: rgba(244, 63, 94, 0.3) !important; }
+html.dark .border-emerald-100 { border-color: rgba(16, 185, 129, 0.3) !important; }
+html.dark .border-amber-100 { border-color: rgba(245, 158, 11, 0.3) !important; }
+html.dark .border-indigo-100 { border-color: rgba(99, 102, 241, 0.3) !important; }
+html.dark .border-blue-200 { border-color: rgba(37, 99, 235, 0.4) !important; }
+html.dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.4) !important; }
+
+/* Shadow adjustments for dark mode */
+html.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important; }
+html.dark .shadow-xl { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important; }
+html.dark .shadow-2xl { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important; }
+
+/* Dashed borders */
+html.dark .border-dashed { border-color: #4b5563 !important; }
 
 /* --- Premium Large Login Card (White) --- */
 
@@ -471,15 +659,12 @@ html.theme-oled .sidebar {
   box-shadow: 0 15px 30px -5px rgba(37, 99, 235, 0.3);
 }
 
-/* Glass Panels */
+/* Cards */
 .glass-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   box-shadow: var(--glass-shadow);
-  transition: all 0.4s ease;
 }
 
 .glass-card:hover {
@@ -803,56 +988,51 @@ html.theme-oled .sidebar {
   display: flex;
   width: 100%;
   min-height: 100vh;
-  background: var(--mesh-gradient);
-  background-attachment: fixed;
-  color: #1e293b;
+  background: var(--primary-light);
+  color: var(--text-main);
   overflow-x: hidden;
 }
 
-/* Modern Glass Sidebar */
+/* Sidebar */
 .sidebar {
   width: var(--sidebar-width);
-  background: var(--sidebar-glass);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-right: 1px solid var(--glass-border);
+  background: var(--bg-white);
+  border-right: 1px solid var(--border-light);
   position: fixed;
-  top: 1rem;
-  left: 1rem;
-  bottom: 1rem;
+  top: 0;
+  left: 0;
+  bottom: 0;
   padding: 2rem;
   display: flex;
   flex-direction: column;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.2s ease, padding 0.2s ease;
   z-index: 100;
-  border-radius: 32px;
-  box-shadow: var(--glass-shadow);
-  color: #1e293b;
+  border-radius: 0;
+  color: var(--text-main);
 }
 
 .sidebar .brand-title {
-  color: #1e293b;
+  color: var(--text-main);
 }
 
 .sidebar .nav-label {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .sidebar .nav-item {
-  color: #475569;
+  color: var(--text-muted);
   margin-bottom: 0.25rem;
-  border-radius: 16px;
+  border-radius: 8px;
 }
 
 .sidebar .nav-item:hover {
   background: rgba(37, 99, 235, 0.08);
-  color: var(--premium-blue);
+  color: #2563eb;
 }
 
 .sidebar .nav-item.active {
-  background: var(--premium-blue);
+  background: #2563eb;
   color: white;
-  box-shadow: 0 8px 20px -4px rgba(37, 99, 235, 0.3);
 }
 
 .sidebar-footer .logout-btn {
@@ -1033,16 +1213,15 @@ body.sidebar-collapsed .dashboard-main {
 }
 
 .search-bar {
-  background: #ffffff;
+  background: var(--bg-white);
   padding: 0.8rem 1.75rem;
-  border-radius: 16px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   gap: 1rem;
   width: 450px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-  border: 1px solid #eef2f6;
-  transition: all 0.3s ease;
+  border: 1px solid var(--border-light);
+  transition: border-color 0.15s ease;
 }
 
 .search-bar:focus-within {
@@ -1055,19 +1234,10 @@ body.sidebar-collapsed .dashboard-main {
   border: none;
   outline: none;
   width: 100%;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 500;
-  color: #1e293b;
-  background: transparent;
-}
-
-.search-input {
-  border: none;
-  outline: none;
-  width: 100%;
   font-family: inherit;
   font-size: 0.95rem;
-  color: #374151;
+  color: var(--text-main);
+  background: transparent;
 }
 
 .profile-actions {
@@ -1077,23 +1247,21 @@ body.sidebar-collapsed .dashboard-main {
 }
 
 .icon-btn {
-  background: white;
-  border: none;
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
   width: 40px;
   height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s;
+  transition: color 0.15s ease;
 }
 
 .icon-btn:hover {
   color: #2563eb;
-  transform: translateY(-2px);
 }
 
 .user-profile {
@@ -1120,36 +1288,29 @@ body.sidebar-collapsed .dashboard-main {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
+  background: var(--bg-white);
   padding: 1.5rem;
-  border-radius: 28px;
+  border-radius: 16px;
   box-shadow: var(--glass-shadow);
   display: flex;
   flex-direction: column;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid var(--glass-border);
+  transition: box-shadow 0.15s ease;
+  border: 1px solid var(--border-light);
 }
 
 .stat-card:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
-  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .floating-card {
-  background: #ffffff;
-  backdrop-filter: blur(8px);
-  border-radius: 32px;
-  border: 1px solid var(--glass-border);
+  background: var(--bg-white);
+  border-radius: 16px;
+  border: 1px solid var(--border-light);
   box-shadow: var(--glass-shadow);
-  transition: all 0.3s ease;
 }
 
 .floating-card:hover {
-  background: #ffffff;
-  transform: translateY(-4px);
-  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .stat-header {

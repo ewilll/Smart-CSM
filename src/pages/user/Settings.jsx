@@ -517,8 +517,8 @@ export default function Settings() {
                                     <label className="flex items-center gap-3 text-xs font-black text-blue-900 uppercase tracking-widest mb-4">
                                         <Palette size={16} className="text-blue-600" /> {t('visual_theme')}
                                     </label>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        {['light', 'dark', 'oled'].map((t) => (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {['light', 'dark'].map((t) => (
                                             <button
                                                 key={t}
                                                 onClick={() => setTheme(t)}

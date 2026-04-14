@@ -346,14 +346,38 @@ export default function AdminDashboard() {
     }, [currentTab, user]);
 
     const fetchBills = async () => {
-        const { data, count } = await supabase
-            .from('bills')
-            .select('*, profiles(full_name)', { count: 'exact' })
-            .range(billPage * PAGE_SIZE, (billPage + 1) * PAGE_SIZE - 1)
-            .order('created_at', { ascending: false });
+        try {
+            let query = supabase
+                .from('bills')
+                .select('*, profiles(full_name)', { count: 'exact' })
+                .range(billPage * PAGE_SIZE, (billPage + 1) * PAGE_SIZE - 1)
+                .order('created_at', { ascending: false });
 
-        if (data) setBills(data);
-        if (count !== undefined) setStats(prev => ({ ...prev, totalBills: count }));
+            let { data, error, count } = await query;
+
+            if (error) {
+                console.warn('fetchBills join failed, retrying without profile join:', error.message);
+                const fallback = await supabase
+                    .from('bills')
+                    .select('*', { count: 'exact' })
+                    .range(billPage * PAGE_SIZE, (billPage + 1) * PAGE_SIZE - 1)
+                    .order('created_at', { ascending: false });
+                data = fallback.data;
+                error = fallback.error;
+                count = fallback.count;
+            }
+
+            if (error) {
+                console.error('fetchBills error:', error);
+                setBills([]);
+                return;
+            }
+            if (data) setBills(data);
+            if (count !== undefined) setStats(prev => ({ ...prev, totalBills: count }));
+        } catch (err) {
+            console.error('fetchBills exception:', err);
+            setBills([]);
+        }
     };
 
     const handleCreateBill = async (e) => {
@@ -462,6 +486,12 @@ export default function AdminDashboard() {
         if (getCurrentUser()?.role !== 'admin') return;
         fetchUsers();
     }, [userPage]);
+
+    useEffect(() => {
+        if (!isAuthenticated()) return;
+        if (getCurrentUser()?.role !== 'admin') return;
+        fetchBills();
+    }, [billPage]);
 
     const addPulse = (title, message, type) => {
         const id = Math.random().toString(36).substring(7);
@@ -869,12 +899,19 @@ export default function AdminDashboard() {
     const updateStatus = async (status) => {
         if (!selectedIncident) return;
         try {
-            const { error } = await supabase
+            const { data: updated, error } = await supabase
                 .from('incidents')
-                .update({ status })
-                .eq('id', selectedIncident.id);
+                .update({ status, updated_at: new Date().toISOString() })
+                .eq('id', selectedIncident.id)
+                .select();
 
             if (error) throw error;
+
+            if (!updated || updated.length === 0) {
+                setNotification({ type: 'error', message: 'Update blocked — admin RLS policy may need to be applied. Run fix_incidents_admin_rls.sql in Supabase SQL Editor.' });
+                setTimeout(() => setNotification(null), 8000);
+                return;
+            }
             const nextIncident = { ...selectedIncident, status };
             setIncidents((prev) => prev.map((i) => (i.id === selectedIncident.id ? { ...i, status } : i)));
             setAllIncidents((prev) =>
@@ -922,8 +959,10 @@ export default function AdminDashboard() {
             } else if (type === 'bill') {
                 const { error: err } = await supabase.from('bills').delete().eq('id', item.id);
                 error = err;
+            } else if (type === 'announcement') {
+                const { error: err } = await supabase.from('announcements').delete().eq('id', item.id);
+                error = err;
             } else if (type === 'transaction') {
-                // Mock delete
                 setTransactions(transactions.filter(t => t.id !== item.id));
                 setNotification({ type: 'success', message: 'Transaction deleted' });
                 setConfirmModal({ isOpen: false });
@@ -942,6 +981,9 @@ export default function AdminDashboard() {
             } else if (type === 'announcement') {
                 setAnnouncements(announcements.filter(a => a.id !== item.id));
                 setNotification({ type: 'success', message: 'Advisory deleted permanently' });
+            } else if (type === 'bill') {
+                setBills(bills.filter(b => b.id !== item.id));
+                setNotification({ type: 'success', message: 'Bill deleted successfully' });
             }
 
             setConfirmModal({ isOpen: false, ...confirmModal });
@@ -1213,10 +1255,10 @@ export default function AdminDashboard() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.1 }}
                             whileHover={{ y: -5 }}
-                            className="flex-1 min-w-[280px] bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group overflow-hidden relative"
+                            className="flex-1 min-w-[280px] bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between group overflow-hidden relative"
                         >
                             <div className="relative z-10">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{card.label}</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 mb-1">{card.label}</p>
                                 <div className="flex items-baseline gap-2">
                                     <motion.h3
                                         key={card.value}
@@ -1226,14 +1268,14 @@ export default function AdminDashboard() {
                                     >
                                         {card.value}
                                     </motion.h3>
-                                    <span className={`text-[10px] font-bold ${card.trend.includes('+') ? 'text-emerald-500' : 'text-blue-500'}`}>{card.trend}</span>
+                                    <span className={`text-[10px] font-bold ${card.trend.includes('+') ? 'text-emerald-400' : 'text-blue-400'}`}>{card.trend}</span>
                                 </div>
-                                <p className="text-[9px] text-slate-400 mt-1 font-bold">{card.sub}</p>
+                                <p className="text-[10px] text-slate-600 dark:text-slate-300 mt-1 font-bold">{card.sub}</p>
                             </div>
                             <div className={`p-4 ${card.color} text-white rounded-2xl shadow-lg relative z-10 group-hover:scale-110 transition-transform`}>
                                 {card.icon}
                             </div>
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-full -mr-12 -mt-12 group-hover:bg-slate-100 transition-colors"></div>
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-slate-100 dark:bg-slate-700/50 rounded-full -mr-12 -mt-12 group-hover:bg-slate-200 dark:group-hover:bg-slate-700 transition-colors"></div>
                         </motion.div>
                     ))}
                 </div>
@@ -1242,7 +1284,7 @@ export default function AdminDashboard() {
                     {/* Dashboard Tabs & Content */}
                     <div className="flex-1 overflow-hidden">
                         {/* Tabs */}
-                        <div className="flex flex-wrap gap-2 p-1.5 bg-white/50 dark:bg-slate-800/95 backdrop-blur-md dark:backdrop-blur-none rounded-[24px] border border-white/30 dark:border-slate-600 shadow-sm dark:shadow-black/20 mb-8 w-fit">
+                        <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-[24px] border border-slate-200 dark:border-slate-600 shadow-sm mb-8 w-fit">
                             {[
                                 { id: 'analytics', label: t('analytics'), icon: <BarChart3 size={16} />, color: 'blue' },
                                 { id: 'incidents', label: t('incidents'), icon: <AlertCircle size={16} />, color: 'rose' },
@@ -1263,8 +1305,8 @@ export default function AdminDashboard() {
                                         setCurrentTab(next);
                                     }}
                                     className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all relative overflow-hidden group ${currentTab === tab.id
-                                        ? `bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-lg shadow-slate-900/20`
-                                        : 'text-slate-500 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white'
+                                        ? `bg-blue-600 text-white shadow-lg shadow-blue-600/20`
+                                        : 'text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white'
                                         }`}
                                 >
                                     <span className="relative z-10">{tab.icon}</span>
@@ -1272,7 +1314,7 @@ export default function AdminDashboard() {
                                     {currentTab === tab.id && (
                                         <motion.div
                                             layoutId="activeTab"
-                                            className="absolute inset-0 bg-slate-900 z-0"
+                                            className="absolute inset-0 bg-blue-600 z-0"
                                             transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                                         />
                                     )}
@@ -1296,15 +1338,15 @@ export default function AdminDashboard() {
                             {
                                 currentTab === 'incidents' && (() => {
                                     const q = searchQuery.trim();
-                                    const statusNorm = (s) => String(s || '').trim();
+
+                                    // Server-side query already filters by Active vs History status,
+                                    // so `incidents` always contains the right page of data.
+                                    // Use `allIncidents` only when searching across all records.
+                                    const listToFilter = q ? allIncidents : incidents;
                                     const isHistoryStatus = (s) => {
-                                        const n = statusNorm(s);
+                                        const n = String(s || '').trim();
                                         return n === 'Resolved' || n === 'Declined';
                                     };
-                                    // History must use `allIncidents` (full list). Paged `incidents` is only the
-                                    // current server page for Active/History and can miss rows or go stale vs .or() errors.
-                                    const listToFilter =
-                                        incidentFilter === 'History' ? allIncidents : q ? allIncidents : incidents;
                                     const filtered = listToFilter
                                         .filter((i) => {
                                             const matchesSearch = !q ||
@@ -1326,11 +1368,9 @@ export default function AdminDashboard() {
                                             return compareIncidentsForWorkQueue(a, b);
                                         });
 
-                                    const historySliceStart = page * PAGE_SIZE;
-                                    const incidentsForDisplay =
-                                        incidentFilter === 'History'
-                                            ? filtered.slice(historySliceStart, historySliceStart + PAGE_SIZE)
-                                            : filtered;
+                                    const incidentsForDisplay = q
+                                        ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+                                        : filtered;
 
                                     // --- GAP 2: SLA Timer Logic ---
                                     const getSlaStatus = (incident) => {
@@ -1357,32 +1397,34 @@ export default function AdminDashboard() {
                                     return (
                                         <div className="space-y-4">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                                                {incidentFilter === 'Active' && (
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                                        {t('work_queue_sorted_hint')}
-                                                    </p>
-                                                )}
-                                                <div className="flex gap-2 bg-white/50 dark:bg-slate-800/90 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-600 shadow-sm">
-                                                    <button
-                                                        onClick={() => {
-                                                            setPage(0);
-                                                            setSearchQuery('');
-                                                            setIncidentFilter('Active');
-                                                        }}
-                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'Active' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}
-                                                    >
-                                                        {t('active_queue')}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setPage(0);
-                                                            setSearchQuery('');
-                                                            setIncidentFilter('History');
-                                                        }}
-                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'History' ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-lg shadow-slate-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}
-                                                    >
-                                                        {t('incident_history')}
-                                                    </button>
+                                                <div className="flex flex-col gap-2">
+                                                    {incidentFilter === 'Active' && (
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                            {t('work_queue_sorted_hint')}
+                                                        </p>
+                                                    )}
+                                                    <div className="flex gap-2 bg-white/50 dark:bg-slate-800/90 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-600 shadow-sm">
+                                                        <button
+                                                            onClick={() => {
+                                                                setPage(0);
+                                                                setSearchQuery('');
+                                                                setIncidentFilter('Active');
+                                                            }}
+                                                            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'Active' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}
+                                                        >
+                                                            {t('active_queue')}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setPage(0);
+                                                                setSearchQuery('');
+                                                                setIncidentFilter('History');
+                                                            }}
+                                                            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'History' ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-lg shadow-slate-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}
+                                                        >
+                                                            {t('incident_history')}
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 {incidentFilter === 'History' && (
@@ -1460,9 +1502,7 @@ export default function AdminDashboard() {
                                             )}
                                             <Pagination
                                                 currentPage={page}
-                                                totalItems={
-                                                    incidentFilter === 'History' ? filtered.length : stats.total
-                                                }
+                                                totalItems={q ? filtered.length : stats.total}
                                                 pageSize={PAGE_SIZE}
                                                 onPageChange={setPage}
                                             />
@@ -1755,15 +1795,15 @@ export default function AdminDashboard() {
                                                         return filtered.map(bill => (
                                                             <tr key={bill.id} className="hover:bg-slate-50 transition-colors">
                                                                 <td className="px-6 py-4">
-                                                                    <p className="text-slate-800">{bill.profiles?.full_name || 'Generic Resident'}</p>
-                                                                    <p className="text-[10px] font-mono text-slate-400 uppercase">#{bill.id.slice(0, 8)}</p>
+                                                                    <p className="text-slate-800">{bill.profiles?.full_name || 'Resident'}</p>
+                                                                    <p className="text-[10px] font-mono text-slate-400 uppercase">#{(bill.id || '').slice(0, 8)}</p>
                                                                 </td>
-                                                                <td className="px-6 py-4 font-mono text-xs">{bill.account_no}</td>
+                                                                <td className="px-6 py-4 font-mono text-xs">{bill.account_no || '—'}</td>
                                                                 <td className="px-6 py-4 text-xs">
-                                                                    {new Date(bill.reading_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                                                    {bill.reading_date ? new Date(bill.reading_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—'}
                                                                 </td>
-                                                                <td className="px-6 py-4 text-center">{bill.consumption}</td>
-                                                                <td className="px-6 py-4 text-center text-blue-600 font-black">₱{bill.amount.toLocaleString()}</td>
+                                                                <td className="px-6 py-4 text-center">{bill.consumption ?? '—'}</td>
+                                                                <td className="px-6 py-4 text-center text-blue-600 font-black">₱{(bill.amount ?? 0).toLocaleString()}</td>
                                                                 <td className="px-6 py-4 text-center">
                                                                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border 
                                                                 ${bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
