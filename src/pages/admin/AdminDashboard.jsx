@@ -599,18 +599,26 @@ export default function AdminDashboard() {
 
             const batchId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `adv-${Date.now()}`;
 
-            const insertPayload = { ...dbPayload, title: titleTrim, content: contentTrim };
-            // Modern schema: `title` + `content`. Older DBs may still require NOT NULL `subject`; retry if Postgres reports that.
+            // Older DBs: NOT NULL `subject` with no default. New DBs: `title`/`content` only (no `subject` column).
+            const insertModern = { ...dbPayload, title: titleTrim, content: contentTrim };
+            const insertLegacy = { ...insertModern, subject: titleTrim };
+
             let { data: insertedAnnouncement, error } = await supabase
                 .from('announcements')
-                .insert([insertPayload])
+                .insert([insertLegacy])
                 .select('id')
                 .single();
+
             const errMsg = String(error?.message || '').toLowerCase();
-            if (error && errMsg.includes('subject') && (errMsg.includes('not-null') || errMsg.includes('violates'))) {
+            const subjectColumnMissing =
+                errMsg.includes('subject') &&
+                (errMsg.includes('does not exist') ||
+                    errMsg.includes('schema cache') ||
+                    (errMsg.includes('could not find') && errMsg.includes('column')));
+            if (error && subjectColumnMissing) {
                 ({ data: insertedAnnouncement, error } = await supabase
                     .from('announcements')
-                    .insert([{ ...insertPayload, subject: titleTrim }])
+                    .insert([insertModern])
                     .select('id')
                     .single());
             }
