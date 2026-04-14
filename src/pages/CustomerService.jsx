@@ -20,7 +20,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 export default function CustomerService() {
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className="public-marketing min-h-screen bg-slate-50">
             <Navbar />
 
             <div className="pt-32 pb-20 px-6 sm:px-10 lg:px-12 max-w-7xl mx-auto">

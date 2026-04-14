@@ -1,67 +1,80 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
-import { Droplets, ArrowRight, Activity, CreditCard, ShieldCheck } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowRight, Activity, CreditCard, ShieldCheck } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 
 export default function Home() {
+  const [accountNumber, setAccountNumber] = useState('');
+  const navigate = useNavigate();
+
+  const goTrack = (e) => {
+    e.preventDefault();
+    const q = accountNumber.trim();
+    if (q) navigate(`/track?q=${encodeURIComponent(q)}`);
+    else navigate('/track');
+  };
+
   return (
-    <div className="min-h-screen relative flex flex-col overflow-x-hidden water-bg">
+    <div className="public-marketing min-h-screen relative flex flex-col overflow-x-hidden water-bg">
       <Navbar />
 
-      {/* Hero Section - Reference Style */}
-      <section className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden">
-        {/* Detailed Gradient Background matching Reference */}
+      {/* Hero: responsive type, no fixed 100vh overflow; account card aligned */}
+      <section className="relative flex flex-col min-h-[calc(100dvh-4rem)] sm:min-h-[calc(100dvh-5rem)] justify-center overflow-hidden pt-24 sm:pt-28 pb-16 sm:pb-20">
         <div className="absolute inset-0 bg-gradient-to-b from-[#BAE6FD] via-[#7DD3FC] to-[#38BDF8] z-0">
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150"></div>
+          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150" />
         </div>
 
-        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center mt-16">
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-8 text-white leading-[1.1] drop-shadow-sm">
-            Celebrate clear water <br />
-            every day with <span className="text-white">smart, sustainable living.</span>
+        <div className="relative z-10 w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight mb-6 sm:mb-8 text-white leading-[1.12] drop-shadow-sm max-w-3xl mx-auto">
+            Celebrate clear water every day with smart, sustainable living.
           </h1>
 
-          <div className="max-w-lg mx-auto mt-10 flex flex-col sm:flex-row gap-4">
-            <input
-              type="text"
-              placeholder="Enter Account Number"
-              className="flex-1 h-16 rounded-xl px-6 text-lg font-bold text-slate-700 focus:outline-none shadow-lg border-2 border-white/50 focus:border-white placeholder:text-slate-400"
-            />
-            <button
-              onClick={() => (window.location.href = '/track')}
-              className="btn-premium h-16 px-10 text-lg !w-auto"
-            >
-              Check Status
-            </button>
-          </div>
+          <form
+            onSubmit={goTrack}
+            className="w-full max-w-xl mx-auto mt-6 sm:mt-10 rounded-2xl border border-white/40 bg-white/25 backdrop-blur-md p-3 sm:p-4 shadow-lg"
+          >
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="Enter account number"
+                maxLength={16}
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                className="marketing-field flex-1 min-h-[3.5rem] rounded-xl border border-slate-200/90 bg-white/95 px-4 text-base sm:text-lg font-semibold text-slate-800 shadow-inner outline-none ring-2 ring-transparent placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/25"
+              />
+              <button
+                type="submit"
+                className="inline-flex h-14 min-h-[3.5rem] shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 sm:px-8 text-sm sm:text-base font-bold uppercase tracking-wide text-white shadow-md transition-colors hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                Check status
+                <ArrowRight className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <p className="mt-2 text-left text-xs text-slate-700 sm:text-center">
+              Optional — opens bill tracking; leave blank to enter your account on the next screen.
+            </p>
+          </form>
 
-          <div className="mt-12 flex justify-center">
-            {/* Aqua Mascot - Reference Position - UPDATED WITH EYES */}
-            <div className="relative w-48 h-48">
-              <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-xl animate-pulse-slow"></div>
-              <div className="relative w-full h-full bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white/20 animate-float">
+          <div className="mt-10 sm:mt-14 flex justify-center px-2 pb-4">
+            <div className="relative w-40 h-40 sm:w-44 sm:h-44 md:w-48 md:h-48">
+              <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-xl" />
+              <div className="relative flex h-full w-full flex-col items-center justify-center rounded-full border-4 border-white/25 bg-gradient-to-br from-blue-400 to-blue-600 shadow-xl">
 
-                {/* Eyes Container */}
-                <div className="flex gap-6 mb-4 translate-y-2">
-                  {/* Left Eye */}
-                  <div className="w-8 h-10 bg-slate-900 rounded-full relative overflow-hidden animate-blink">
-                    <div className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-white rounded-full"></div>
+                <div className="mb-3 flex translate-y-1 gap-5 sm:gap-6">
+                  <div className="relative h-9 w-7 overflow-hidden rounded-full bg-slate-900 sm:h-10 sm:w-8">
+                    <div className="absolute right-1 top-1.5 h-2 w-2 rounded-full bg-white sm:h-2.5 sm:w-2.5" />
                   </div>
-                  {/* Right Eye */}
-                  <div className="w-8 h-10 bg-slate-900 rounded-full relative overflow-hidden animate-blink">
-                    <div className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-white rounded-full"></div>
+                  <div className="relative h-9 w-7 overflow-hidden rounded-full bg-slate-900 sm:h-10 sm:w-8">
+                    <div className="absolute right-1 top-1.5 h-2 w-2 rounded-full bg-white sm:h-2.5 sm:w-2.5" />
                   </div>
                 </div>
 
-                {/* Mouth */}
-                <div className="w-12 h-6 border-b-4 border-slate-900 rounded-full"></div>
+                <div className="h-5 w-10 rounded-b-full border-b-4 border-slate-900 sm:h-6 sm:w-12" />
 
-                {/* Arms */}
-                <div className="absolute -left-8 top-20 w-12 h-4 bg-blue-500 rounded-full origin-right border-l-4 border-blue-400 animate-wave-left"></div>
-                <div className="absolute -right-8 top-20 w-12 h-4 bg-blue-500 rounded-full origin-left border-r-4 border-blue-400 animate-wave-right"></div>
-
-                <div className="absolute -bottom-6 bg-blue-800 text-white text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg">
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-full bg-blue-900 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-md sm:text-xs sm:px-4 sm:py-1.5">
                   Aqua
                 </div>
               </div>

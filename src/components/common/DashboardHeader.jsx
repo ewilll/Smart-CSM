@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, Bell, ChevronDown, X, MessageSquare, Settings, Clock, AlertCircle, Info, CheckCircle2, MoreHorizontal, Trash2, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProfileManagementModal from '../modals/ProfileManagementModal';
@@ -20,10 +20,12 @@ import { useTranslation } from '../../utils/translations';
  * @param {string} iconBgColor - Background color for icon
  * @param {boolean} showNotifications - State for notifications (controlled)
  * @param {function} setShowNotifications - Notification toggle function (controlled)
+ * @param {boolean} guestLayout - When true and user is null, show a minimal header (public pages)
  */
 export default function DashboardHeader({
     user,
     onUpdateUser,
+    guestLayout = false,
     searchQuery = '',
     setSearchQuery = () => { },
     placeholder = null,
@@ -90,6 +92,79 @@ export default function DashboardHeader({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [setShowNotifications]);
 
+    const toggleTheme = () => {
+        setTheme(theme === 'dark' ? 'light' : 'dark');
+    };
+
+    if (!user && guestLayout) {
+        return (
+            <div className="header-container mb-12 space-y-8">
+                <header className="top-bar flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <Link
+                            to="/"
+                            className="text-sm font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400"
+                        >
+                            Home
+                        </Link>
+                        <span className="text-slate-300 dark:text-slate-600">|</span>
+                        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('public_log')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={toggleTheme}
+                            className="icon-btn w-12 h-12 relative bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center"
+                            title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
+                        >
+                            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
+                        <Link
+                            to="/login"
+                            className="px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        >
+                            Log in
+                        </Link>
+                        <Link
+                            to="/signup"
+                            className="px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                            Sign up
+                        </Link>
+                    </div>
+                </header>
+                {title && (
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 animate-fade-in pl-2">
+                        {icon && (
+                            <div className={`p-3 sm:p-4 rounded-[18px] sm:rounded-[22px] text-white shadow-lg ${iconBgColor || 'bg-gradient-to-br from-blue-600 to-indigo-600'} shrink-0`}>
+                                {React.cloneElement(icon, { size: 20, className: 'sm:w-7 sm:h-7' })}
+                            </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                            <h2 className="text-xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight leading-none mb-1 sm:mb-2 truncate">{title}</h2>
+                            <p className="text-[10px] sm:text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest truncate">{subtitle}</p>
+                        </div>
+                        <div className="search-bar flex w-full sm:max-w-md h-12 px-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-600">
+                            <Search size={18} className="text-slate-400 shrink-0 self-center" />
+                            <input
+                                type="text"
+                                placeholder={placeholder || t('public_search_placeholder')}
+                                className="search-input ml-3 font-semibold text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none w-full bg-transparent"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            {searchQuery && (
+                                <button type="button" onClick={() => setSearchQuery('')} className="p-1 self-center">
+                                    <X size={16} className="text-slate-400" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     if (!user) return null;
 
     const handleSettingsClick = () => {
@@ -98,10 +173,6 @@ export default function DashboardHeader({
         } else {
             navigate('/settings');
         }
-    };
-
-    const toggleTheme = () => {
-        setTheme(theme === 'dark' ? 'light' : 'dark');
     };
 
     return (
@@ -176,14 +247,23 @@ export default function DashboardHeader({
                                             <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{t('notifications')}</h3>
                                             <div className="flex items-center gap-3">
                                                 {unreadCount > 0 && (
-                                                    <button
-                                                        onClick={markAllAsRead}
-                                                        className="text-[10px] font-bold text-blue-600 hover:underline"
-                                                    >
-                                                        {t('markAllRead')}
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            onClick={markAllAsRead}
+                                                            className="text-[10px] font-bold text-blue-600 hover:underline"
+                                                        >
+                                                            {t('markAllRead')}
+                                                        </button>
+                                                        <span className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                                                            {unreadCount} {t('newItem')}
+                                                        </span>
+                                                    </>
                                                 )}
-                                                <span className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">{unreadCount} {t('newItem')}</span>
+                                                {unreadCount === 0 && (
+                                                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                                                        {t('notifications_all_read')}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="max-h-[350px] overflow-y-auto">

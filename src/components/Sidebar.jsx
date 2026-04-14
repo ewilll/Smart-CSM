@@ -81,7 +81,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             indigo: 'hover:text-indigo-600 dark:hover:text-indigo-400',
             slate: 'hover:text-slate-900 dark:hover:text-slate-100',
         }[hover] || 'hover:text-blue-600 dark:hover:text-blue-400';
-        return `nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 ${hoverTone}`;
+        return `nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 ${hoverTone}`;
     };
 
     const inactiveIconHover = (hover = 'blue') => ({
@@ -129,75 +129,75 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                             {/* SHARED OR ROLE-SPECIFIC DASHBOARD */}
                             <div
                                 onClick={() => handleNav(isAdmin ? '/admin' : '/dashboard')}
-                                className={`${isActive('/dashboard') || isActive('/admin') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}`}
+                                className={`${isActive('/dashboard') || isActive('/admin') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}`}
                             >
                                 <LayoutDashboard size={20} className={isActive('/dashboard') || isActive('/admin') ? 'text-white' : inactiveIconHover('blue')} />
-                                <span className="font-bold text-sm line-clamp-1">{isAdmin ? t('admin_panel') : t('dashboard')}</span>
+                                <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{isAdmin ? t('admin_panel') : t('dashboard')}</span>
                             </div>
 
                             {!isAdmin ? (
                                 <>
-                                    <div onClick={() => handleNav('/report-incident')} className={isActive('/report-incident') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
+                                    <div onClick={() => handleNav('/report-incident')} className={isActive('/report-incident') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
                                         <FileText size={20} className={isActive('/report-incident') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('report_incident')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('report_incident')}</span>
                                     </div>
-                                    <div onClick={() => handleNav('/help')} className={isActive('/help') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
+                                    <div onClick={() => handleNav('/help')} className={isActive('/help') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
                                         <MessageSquare size={20} className={isActive('/help') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('ai_support')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('ai_support')}</span>
                                     </div>
-                                    <div onClick={() => handleNav('/bills')} className={isActive('/bills') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
+                                    <div onClick={() => handleNav('/bills')} className={isActive('/bills') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
                                         <Receipt size={20} className={isActive('/bills') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('bills')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('bills')}</span>
                                     </div>
-                                    <div onClick={() => handleNav('/history')} className={isActive('/history') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
+                                    <div onClick={() => handleNav('/history')} className={isActive('/history') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
                                         <Clock size={20} className={isActive('/history') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('history')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('history')}</span>
                                     </div>
-                                    <div onClick={() => handleNav('/public-log')} className={isActive('/public-log') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
+                                    <div onClick={() => handleNav('/public-log')} className={isActive('/public-log') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
                                         <Activity size={20} className={isActive('/public-log') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('public_log')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('public_log')}</span>
                                     </div>
-                                    <div onClick={() => handleNav('/service-map')} className={isActive('/service-map') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
+                                    <div onClick={() => handleNav('/service-map')} className={isActive('/service-map') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
                                         <Map size={20} className={isActive('/service-map') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('service_map')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('service_map')}</span>
                                     </div>
                                 </>
                             ) : (
                                 <>
-                                    <div onClick={() => handleNav('/admin/map')} className={isActive('/admin/map') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
+                                    <div onClick={() => handleNav('/admin/map')} className={isActive('/admin/map') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}>
                                         <Map size={20} className={isActive('/admin/map') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('command_center')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('command_center')}</span>
                                     </div>
                                     <div
                                         onClick={() => handleNav('/admin/messages')}
-                                        className={isActive('/admin/messages') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' : inactiveNavCls('emerald')}
+                                        className={isActive('/admin/messages') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' : inactiveNavCls('emerald')}
                                     >
                                         <MessageSquare size={20} className={isActive('/admin/messages') ? 'text-white' : inactiveIconHover('emerald')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('resident_chat')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('resident_chat')}</span>
                                     </div>
                                     <div
                                         onClick={() => handleNav('/admin/learning')}
-                                        className={isActive('/admin/learning') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : inactiveNavCls('indigo')}
+                                        className={isActive('/admin/learning') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : inactiveNavCls('indigo')}
                                     >
                                         <Brain size={20} className={isActive('/admin/learning') ? 'text-white' : inactiveIconHover('indigo')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('learning_center')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('learning_center')}</span>
                                         {!isActive('/admin/learning') && (
                                             <div className="ml-auto w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
                                         )}
                                     </div>
                                     <div
                                         onClick={() => handleNav('/admin/config')}
-                                        className={isActive('/admin/config') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-slate-900 text-white shadow-lg shadow-slate-500/30' : inactiveNavCls('slate')}
+                                        className={isActive('/admin/config') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-slate-900 text-white shadow-lg shadow-slate-500/30' : inactiveNavCls('slate')}
                                     >
                                         <Settings size={20} className={isActive('/admin/config') ? 'text-white' : inactiveIconHover('slate')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('system_dna')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('system_dna')}</span>
                                     </div>
                                     <div
                                         onClick={() => handleNav('/admin/audit')}
-                                        className={isActive('/admin/audit') ? 'nav-item cursor-pointer flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}
+                                        className={isActive('/admin/audit') ? 'nav-item cursor-pointer flex min-w-0 items-center gap-4 px-4 py-3.5 rounded-xl transition-all group bg-blue-600 text-white shadow-lg shadow-blue-500/30' : inactiveNavCls('blue')}
                                     >
                                         <Database size={20} className={isActive('/admin/audit') ? 'text-white' : inactiveIconHover('blue')} />
-                                        <span className="font-bold text-sm line-clamp-1">{t('system_audit')}</span>
+                                        <span className="flex-1 min-w-0 text-left text-sm font-bold leading-snug break-words">{t('system_audit')}</span>
                                     </div>
                                 </>
                             )}

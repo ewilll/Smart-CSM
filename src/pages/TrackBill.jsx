@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
+import { useSearchParams } from 'react-router-dom';
 import { Search, ArrowRight, FileText, Smartphone, CheckCircle, X, CreditCard, Lock, Loader2 } from 'lucide-react';
 
 export default function TrackBill() {
+    const [searchParams] = useSearchParams();
     const [accountNumber, setAccountNumber] = useState('');
+
+    useEffect(() => {
+        const q = searchParams.get('q');
+        if (q) setAccountNumber(q.trim());
+    }, [searchParams]);
     const [billData, setBillData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -64,7 +71,7 @@ export default function TrackBill() {
     };
 
     return (
-        <div className="min-h-screen relative flex flex-col overflow-x-hidden water-bg">
+        <div className="public-marketing min-h-screen relative flex flex-col overflow-x-hidden water-bg">
             <div className="absolute inset-0 bg-white z-0"></div>
             <div className="absolute inset-0 bg-gradient-to-b from-blue-50 to-white z-0 opacity-50"></div>
             <Navbar />

@@ -200,7 +200,7 @@ export default function SignUp() {
             {/* Back Button */}
             <Link
                 to="/"
-                className="absolute top-6 left-6 z-50 flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-white/40 rounded-full shadow-lg text-slate-700 font-bold text-sm hover:bg-white hover:scale-105 hover:text-blue-600 transition-all duration-300"
+                className="absolute top-6 left-6 z-50 flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-full text-slate-700 dark:text-slate-200 font-bold text-sm hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >
                 <ArrowLeft size={16} /> Back to Home
             </Link>

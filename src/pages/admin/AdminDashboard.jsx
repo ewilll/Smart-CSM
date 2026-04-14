@@ -1328,8 +1328,8 @@ export default function AdminDashboard() {
                             {/* --- ANALYTICS TAB --- */}
                             {
                                 currentTab === 'analytics' && (
-                                    <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-                                        <AdminAnalytics incidents={incidents} users={users} onSwitchTab={setCurrentTab} />
+                                    <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-600 shadow-sm">
+                                        <AdminAnalytics incidents={allIncidents} users={users} onSwitchTab={setCurrentTab} />
                                     </div>
                                 )
                             }

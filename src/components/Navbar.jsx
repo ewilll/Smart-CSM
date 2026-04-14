@@ -60,9 +60,9 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="fixed top-0 left-0 w-full z-[100] bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm transition-all duration-300">
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-12">
-        <div className="flex items-center justify-between h-20 sm:h-24">
+    <nav className="public-marketing fixed top-0 left-0 w-full z-[100] bg-white/95 dark:bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-sm transition-all duration-300 supports-[backdrop-filter]:bg-white/90">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
+        <div className="flex items-center justify-between gap-4 min-h-[4.5rem] sm:min-h-[5.5rem] py-2">
           {/* Logo */}
           <Link
             to="/"
@@ -77,7 +77,7 @@ export default function Navbar() {
             </div>
           </Link>
           {/* Desktop Menu */}
-          <div className="hidden md:flex items-center gap-6 lg:gap-10">
+          <div className="hidden md:flex items-center justify-center flex-1 min-w-0 gap-4 lg:gap-8 xl:gap-10 px-2">
             <Link to="/" onClick={(e) => handleNavClick(e, '/')} className={getLinkClass('/')}>Plans and Services</Link>
             <Link to="/#services" onClick={(e) => handleNavClick(e, '/#services')} className={getLinkClass('/#services')}>Why PrimeWater?</Link>
             <Link to="/customer-service" className={getLinkClass('/customer-service')}>Customer Service</Link>
@@ -91,13 +91,13 @@ export default function Navbar() {
                   <LayoutDashboard size={18} />
                   Dashboard
                 </Link>
-                <div className="flex items-center gap-2 pl-4 border-l border-slate-200">
-                  <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-blue-600 border border-slate-200 font-black text-xs">
+                <div className="flex items-center gap-2 pl-3 sm:pl-4 border-l border-slate-200 min-w-0">
+                  <div className="w-9 h-9 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-blue-600 border border-slate-200 font-black text-xs">
                     {user.name?.charAt(0) || 'U'}
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-slate-400 uppercase leading-none">Logged In</span>
-                    <span className="text-xs font-bold text-slate-800">{user.name}</span>
+                  <div className="flex flex-col min-w-0 max-w-[10rem] lg:max-w-[14rem]">
+                    <span className="text-[10px] font-black text-slate-600 uppercase leading-none tracking-wide">Logged In</span>
+                    <span className="text-xs font-bold text-slate-800 truncate" title={user.name}>{user.name}</span>
                   </div>
                 </div>
               </div>
@@ -128,7 +128,7 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {isOpen && (
-        <div className="md:hidden bg-white border-t border-slate-100 absolute w-full left-0 animate-slide-up shadow-xl">
+        <div className="public-marketing md:hidden bg-white border-t border-slate-100 absolute w-full left-0 top-full animate-slide-up shadow-xl max-h-[min(80vh,520px)] overflow-y-auto">
           <div className="px-4 pt-2 pb-6 space-y-2">
             <Link to="/" className={getMobileLinkClass('/')} onClick={(e) => handleNavClick(e, '/')}>Plans and Services</Link>
             <Link to="/#services" className={getMobileLinkClass('/#services')} onClick={(e) => handleNavClick(e, '/#services')}>Why PrimeWater?</Link>

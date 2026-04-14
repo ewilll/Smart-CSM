@@ -4,7 +4,7 @@ import Sidebar from '../../components/Sidebar';
 import DashboardHeader from '../../components/common/DashboardHeader';
 import { supabase } from '../../utils/supabaseClient';
 import { Activity, Clock, ShieldCheck, MapPin, Search, AlertCircle } from 'lucide-react';
-import { getCurrentUser } from '../../utils/auth';
+import { getCurrentUser, isAuthenticated } from '../../utils/auth';
 import { useTranslation } from '../../utils/translations';
 import { usePreferences } from '../../context/PreferencesContext';
 
@@ -15,6 +15,7 @@ export default function PublicLog() {
     const [selectedIncident, setSelectedIncident] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [user, setUser] = useState(getCurrentUser());
+    const loggedIn = isAuthenticated();
     const [searchQuery, setSearchQuery] = useState('');
     const { language } = usePreferences();
     const { t } = useTranslation(language);
@@ -52,7 +53,7 @@ export default function PublicLog() {
             // Fetch recent incidents, limit to 50 for performance, public transparency
             const { data, error } = await supabase
                 .from('incidents')
-                .select('id, type, location, status, created_at, severity, description, priority_score')
+                .select('id, type, location, status, created_at, updated_at, severity, description, priority_score')
                 .order('priority_score', { ascending: false })
                 .order('created_at', { ascending: false })
                 .limit(50);
@@ -82,7 +83,7 @@ export default function PublicLog() {
         const uniqueBarangays = new Set(data.filter(inc => inc && inc.location).map(inc => inc.location.split('(')[0].trim())).size;
 
         setImpactStats({
-            resolutions24h: res24h || 3, // Mock some activity if fresh
+            resolutions24h: res24h,
             activeSupport: active,
             barangaysServiced: uniqueBarangays
         });
@@ -117,13 +118,21 @@ export default function PublicLog() {
         (inc.location && inc.location.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
-    return (
-        <div className="dashboard-layout bg-slate-50 min-h-screen">
-            <Sidebar isOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+    const goProtected = (path) => {
+        if (loggedIn) navigate(path);
+        else navigate('/login', { state: { from: { pathname: path } } });
+    };
 
-            <main className="dashboard-main p-8">
+    return (
+        <div className="dashboard-layout bg-slate-50 dark:bg-slate-900 min-h-screen">
+            {loggedIn ? (
+                <Sidebar isOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+            ) : null}
+
+            <main className="dashboard-main p-8" style={loggedIn ? undefined : { marginLeft: 0 }}>
                 <DashboardHeader
-                    user={user}
+                    guestLayout={!loggedIn}
+                    user={loggedIn ? user : null}
                     onUpdateUser={setUser}
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
@@ -136,7 +145,7 @@ export default function PublicLog() {
                 {/* Community Impact Metrics - Fluid & Responsive */}
                 <div className="flex flex-wrap items-stretch gap-4 sm:gap-6 mb-12">
                     <div
-                        onClick={() => navigate('/service-map')}
+                        onClick={() => goProtected('/service-map')}
                         className="flex-1 min-w-[280px] bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-5 group hover:border-indigo-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all"
                     >
                         <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
@@ -148,7 +157,7 @@ export default function PublicLog() {
                         </div>
                     </div>
                     <div
-                        onClick={() => navigate('/support')}
+                        onClick={() => goProtected('/support')}
                         className="flex-1 min-w-[280px] bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-5 group hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all"
                     >
                         <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
@@ -160,7 +169,7 @@ export default function PublicLog() {
                         </div>
                     </div>
                     <div
-                        onClick={() => navigate('/service-map')}
+                        onClick={() => goProtected('/service-map')}
                         className="flex-1 min-w-[280px] bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-5 group hover:border-emerald-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all"
                     >
                         <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">

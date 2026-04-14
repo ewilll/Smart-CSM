@@ -22,6 +22,7 @@ import InfoHub from './pages/user/InfoHub';
 import TrackBill from './pages/TrackBill';
 import CustomerService from './pages/CustomerService';
 import Bills from './pages/user/Bills';
+import NotificationsCenter from './pages/NotificationsCenter';
 import Chatbot from './components/Chatbot';
 import RealTimeTracking from './pages/features/RealTimeTracking';
 import InstantPayments from './pages/features/InstantPayments';
@@ -265,9 +266,11 @@ function MainShell({ authSettled, loading }) {
                 <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
                 <Route path="/bills" element={<ProtectedRoute><Bills /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><AppHistory /></ProtectedRoute>} />
-                <Route path="/public-log" element={<ProtectedRoute><PublicLog /></ProtectedRoute>} />
+                {/* Public transparency feed: readable with anon key + RLS; no login required */}
+                <Route path="/public-log" element={<PublicLog />} />
                 <Route path="/info-hub" element={<ProtectedRoute><InfoHub /></ProtectedRoute>} />
                 <Route path="/service-map" element={<ProtectedRoute><ServiceMap /></ProtectedRoute>} />
+                <Route path="/notifications" element={<ProtectedRoute><NotificationsCenter /></ProtectedRoute>} />
 
                 {/* Protected Admin Routes */}
                 <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />

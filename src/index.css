@@ -398,6 +398,35 @@ html.dark textarea::placeholder {
   color: #6b7280;
 }
 
+/* --- Public marketing (Home, TrackBill, Navbar): keep dark text on white UI when html.dark --- */
+html.dark .public-marketing .text-slate-900,
+html.dark .public-marketing .text-slate-800 {
+  color: #0f172a !important;
+}
+
+html.dark .public-marketing .text-slate-700 {
+  color: #334155 !important;
+}
+
+html.dark .public-marketing .text-slate-600 {
+  color: #475569 !important;
+}
+
+html.dark .public-marketing .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.dark .public-marketing .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.dark .public-marketing input.marketing-field,
+html.dark .public-marketing textarea.marketing-field {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgb(203 213 225) !important;
+}
+
 html.dark input:focus,
 html.dark select:focus,
 html.dark textarea:focus {

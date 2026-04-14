@@ -348,6 +348,29 @@ export default function ReportIncident() {
 
             if (error) throw error;
 
+            if (image instanceof File && inserted?.id) {
+                const extRaw = (image.name && image.name.includes('.'))
+                    ? image.name.split('.').pop()
+                    : 'jpg';
+                const ext = String(extRaw).toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+                const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
+                const path = `${user.id}/${inserted.id}.${safeExt}`;
+                const { error: upErr } = await supabase.storage
+                    .from('incident-evidence')
+                    .upload(path, image, {
+                        upsert: true,
+                        contentType: image.type || 'image/jpeg',
+                    });
+                if (!upErr) {
+                    const { data: pub } = supabase.storage.from('incident-evidence').getPublicUrl(path);
+                    if (pub?.publicUrl) {
+                        await supabase.from('incidents').update({ evidence_url: pub.publicUrl }).eq('id', inserted.id);
+                    }
+                } else {
+                    console.warn('[ReportIncident] evidence upload skipped:', upErr.message || upErr);
+                }
+            }
+
             const sessionUser = getCurrentUser();
             const ackBatchId =
                 typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ack-${Date.now()}`;
@@ -372,6 +395,8 @@ export default function ReportIncident() {
                 description: '',
                 severity: 'Medium'
             });
+            setImage(null);
+            setImagePreview(null);
             // After 3 seconds, redirect to dashboard
             setTimeout(() => {
                 navigate('/dashboard');
