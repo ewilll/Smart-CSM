@@ -368,6 +368,8 @@ export default function AdminDashboard() {
                     amount: parseFloat(billForm.amount),
                     consumption: parseFloat(billForm.consumption),
                     due_date: new Date(billForm.due_date).toISOString(),
+                    reading_date: new Date().toISOString(),
+                    status: 'Unpaid',
                 }]);
 
             if (error) throw error;
@@ -582,16 +584,46 @@ export default function AdminDashboard() {
         e.preventDefault();
         try {
             const { send_sms, send_email, target_barangays, ...dbPayload } = announcementForm;
+            const titleTrim = (dbPayload.title || '').trim();
+            const contentTrim = (dbPayload.content || '').trim();
+            if (!titleTrim) {
+                setNotification({ type: 'error', message: t('advisory_title_required') });
+                setTimeout(() => setNotification(null), 4000);
+                return;
+            }
+            if (!contentTrim) {
+                setNotification({ type: 'error', message: t('advisory_body_required') });
+                setTimeout(() => setNotification(null), 4000);
+                return;
+            }
 
             const batchId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `adv-${Date.now()}`;
 
-            const { data: insertedAnnouncement, error } = await supabase
+            const insertPayload = { ...dbPayload, title: titleTrim, content: contentTrim };
+            // Modern schema: `title` + `content`. Older DBs may still require NOT NULL `subject`; retry if Postgres reports that.
+            let { data: insertedAnnouncement, error } = await supabase
                 .from('announcements')
-                .insert([dbPayload])
+                .insert([insertPayload])
                 .select('id')
                 .single();
+            const errMsg = String(error?.message || '').toLowerCase();
+            if (error && errMsg.includes('subject') && (errMsg.includes('not-null') || errMsg.includes('violates'))) {
+                ({ data: insertedAnnouncement, error } = await supabase
+                    .from('announcements')
+                    .insert([{ ...insertPayload, subject: titleTrim }])
+                    .select('id')
+                    .single());
+            }
 
-            if (error) throw error;
+            if (error) {
+                const em = String(error.message || '').toLowerCase();
+                if (em.includes('audit_logs')) {
+                    throw new Error(
+                        'Database is missing public.audit_logs (or a trigger references it). Run migrations/create_audit_logs_table.sql in the Supabase SQL Editor, then try again.'
+                    );
+                }
+                throw error;
+            }
 
             const announcementId = insertedAnnouncement?.id;
 
@@ -715,8 +747,9 @@ export default function AdminDashboard() {
         }
     };
 
-    const fetchIncidents = async () => {
-        setLoading(true);
+    const fetchIncidents = async (options = {}) => {
+        const skipLoading = options.skipLoading === true;
+        if (!skipLoading) setLoading(true);
         try {
             const isHistory = incidentFilter === 'History';
 
@@ -724,9 +757,9 @@ export default function AdminDashboard() {
             let pageQuery = supabase.from('incidents').select('*');
 
             if (isHistory) {
-                countQuery = countQuery.or('status.eq.Resolved,status.eq.Declined');
+                countQuery = countQuery.in('status', ['Resolved', 'Declined']);
                 pageQuery = pageQuery
-                    .or('status.eq.Resolved,status.eq.Declined')
+                    .in('status', ['Resolved', 'Declined'])
                     .order('updated_at', { ascending: false })
                     .order('created_at', { ascending: false });
             } else {
@@ -741,14 +774,19 @@ export default function AdminDashboard() {
             const { count } = await countQuery;
             const { data, error } = await pageQuery.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-            if (!error && data) {
+            if (error) {
+                console.warn('[fetchIncidents] paged query', error);
+                setIncidents([]);
+            } else if (data) {
                 setIncidents(data);
                 setStats((prev) => ({ ...prev, total: count ?? prev.total }));
             }
 
-            const { data: fullData } = await supabase.from('incidents').select('*');
+            const { data: fullData, error: fullError } = await supabase.from('incidents').select('*');
 
-            if (fullData) {
+            if (fullError) {
+                console.warn('[fetchIncidents] full incidents list', fullError);
+            } else if (fullData) {
                 setAllIncidents(fullData);
                 const pending = fullData.filter((i) => i.status === 'Pending').length;
                 const inProgress = fullData.filter((i) => ['In Progress', 'Dispatched', 'On-Site'].includes(i.status)).length;
@@ -764,7 +802,7 @@ export default function AdminDashboard() {
         } catch (err) {
             console.error('Error fetching incidents:', err);
         }
-        setLoading(false);
+        if (!skipLoading) setLoading(false);
     };
 
     // calculateStats is now integrated into fetchIncidents for global accuracy
@@ -829,8 +867,14 @@ export default function AdminDashboard() {
                 .eq('id', selectedIncident.id);
 
             if (error) throw error;
-            setIncidents(incidents.map(i => i.id === selectedIncident.id ? { ...i, status } : i));
-            setSelectedIncident({ ...selectedIncident, status });
+            const nextIncident = { ...selectedIncident, status };
+            setIncidents((prev) => prev.map((i) => (i.id === selectedIncident.id ? { ...i, status } : i)));
+            setAllIncidents((prev) =>
+                prev.some((i) => i.id === selectedIncident.id)
+                    ? prev.map((i) => (i.id === selectedIncident.id ? { ...i, status } : i))
+                    : [...prev, { ...selectedIncident, status }]
+            );
+            setSelectedIncident(nextIncident);
 
             await sendIncidentOutboundNotifications(selectedIncident, status);
 
@@ -851,6 +895,7 @@ export default function AdminDashboard() {
                 setNotification({ type: 'success', message: `Status updated to ${status}` });
             }
             setTimeout(() => setNotification(null), 3000);
+            await fetchIncidents({ skipLoading: true });
         } catch (err) {
             console.error('Error updating status:', err);
             setNotification({ type: 'error', message: 'Failed to update status' });
@@ -991,7 +1036,10 @@ export default function AdminDashboard() {
     };
 
     const exportIncidentHistory = () => {
-        const historyData = allIncidents.filter(i => i.status === 'Resolved' || i.status === 'Declined');
+        const historyData = allIncidents.filter((i) => {
+            const n = String(i.status || '').trim();
+            return n === 'Resolved' || n === 'Declined';
+        });
         if (historyData.length === 0) {
             setNotification({ type: 'error', message: 'No history data to export' });
             return;
@@ -1080,13 +1128,16 @@ export default function AdminDashboard() {
 
             if (error) throw error;
 
-            // Log action for Audit Trail
-            await supabase.from('audit_logs').insert({
+            // Log action for Audit Trail (non-blocking if table/trigger missing or RLS differs)
+            const { error: auditErr } = await supabase.from('audit_logs').insert({
                 admin_id: user.id,
                 action: 'UPDATE_USER',
                 target_user_id: editModal.user.id,
                 details: `Updated profile for ${sanitizedForm.full_name} (Role: ${sanitizedForm.role})`
             });
+            if (auditErr) {
+                console.warn('[audit_logs]', auditErr.message);
+            }
 
             setUsers(users.map(u => u.id === editModal.user.id ? { ...u, ...sanitizedForm } : u));
             setEditModal({ isOpen: false, user: null });
@@ -1163,7 +1214,7 @@ export default function AdminDashboard() {
                                         key={card.value}
                                         initial={{ scale: 0.8, opacity: 0 }}
                                         animate={{ scale: 1, opacity: 1 }}
-                                        className="text-3xl font-black text-slate-900"
+                                        className="text-3xl font-black text-slate-900 dark:text-slate-100"
                                     >
                                         {card.value}
                                     </motion.h3>
@@ -1183,7 +1234,7 @@ export default function AdminDashboard() {
                     {/* Dashboard Tabs & Content */}
                     <div className="flex-1 overflow-hidden">
                         {/* Tabs */}
-                        <div className="flex flex-wrap gap-2 p-1.5 bg-white/50 backdrop-blur-md rounded-[24px] border border-white/30 shadow-sm mb-8 w-fit">
+                        <div className="flex flex-wrap gap-2 p-1.5 bg-white/50 dark:bg-slate-800/95 backdrop-blur-md dark:backdrop-blur-none rounded-[24px] border border-white/30 dark:border-slate-600 shadow-sm dark:shadow-black/20 mb-8 w-fit">
                             {[
                                 { id: 'analytics', label: t('analytics'), icon: <BarChart3 size={16} />, color: 'blue' },
                                 { id: 'incidents', label: t('incidents'), icon: <AlertCircle size={16} />, color: 'rose' },
@@ -1196,10 +1247,16 @@ export default function AdminDashboard() {
                             ].map((tab) => (
                                 <button
                                     key={tab.id}
-                                    onClick={() => setCurrentTab(tab.id)}
+                                    onClick={() => {
+                                        const next = tab.id;
+                                        if ((currentTab === 'bills' && next === 'incidents') || (currentTab === 'incidents' && next === 'bills')) {
+                                            setSearchQuery('');
+                                        }
+                                        setCurrentTab(next);
+                                    }}
                                     className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all relative overflow-hidden group ${currentTab === tab.id
-                                        ? `bg-slate-900 text-white shadow-lg shadow-slate-900/20`
-                                        : 'text-slate-500 hover:bg-white hover:text-slate-900'
+                                        ? `bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-lg shadow-slate-900/20`
+                                        : 'text-slate-500 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white'
                                         }`}
                                 >
                                     <span className="relative z-10">{tab.icon}</span>
@@ -1230,18 +1287,27 @@ export default function AdminDashboard() {
                             {/* --- INCIDENTS TAB --- */}
                             {
                                 currentTab === 'incidents' && (() => {
-                                    const listToFilter = searchQuery ? allIncidents : incidents;
+                                    const q = searchQuery.trim();
+                                    const statusNorm = (s) => String(s || '').trim();
+                                    const isHistoryStatus = (s) => {
+                                        const n = statusNorm(s);
+                                        return n === 'Resolved' || n === 'Declined';
+                                    };
+                                    // History must use `allIncidents` (full list). Paged `incidents` is only the
+                                    // current server page for Active/History and can miss rows or go stale vs .or() errors.
+                                    const listToFilter =
+                                        incidentFilter === 'History' ? allIncidents : q ? allIncidents : incidents;
                                     const filtered = listToFilter
                                         .filter((i) => {
-                                            const matchesSearch =
-                                                (i.type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                                (i.user_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                                (i.id || '').toString().includes(searchQuery);
+                                            const matchesSearch = !q ||
+                                                (i.type || '').toLowerCase().includes(q.toLowerCase()) ||
+                                                (i.user_name || '').toLowerCase().includes(q.toLowerCase()) ||
+                                                (i.id || '').toString().includes(q);
 
                                             if (incidentFilter === 'History') {
-                                                return matchesSearch && (i.status === 'Resolved' || i.status === 'Declined');
+                                                return matchesSearch && isHistoryStatus(i.status);
                                             }
-                                            return matchesSearch && i.status !== 'Resolved' && i.status !== 'Declined';
+                                            return matchesSearch && !isHistoryStatus(i.status);
                                         })
                                         .sort((a, b) => {
                                             if (incidentFilter === 'History') {
@@ -1251,6 +1317,12 @@ export default function AdminDashboard() {
                                             }
                                             return compareIncidentsForWorkQueue(a, b);
                                         });
+
+                                    const historySliceStart = page * PAGE_SIZE;
+                                    const incidentsForDisplay =
+                                        incidentFilter === 'History'
+                                            ? filtered.slice(historySliceStart, historySliceStart + PAGE_SIZE)
+                                            : filtered;
 
                                     // --- GAP 2: SLA Timer Logic ---
                                     const getSlaStatus = (incident) => {
@@ -1282,22 +1354,24 @@ export default function AdminDashboard() {
                                                         {t('work_queue_sorted_hint')}
                                                     </p>
                                                 )}
-                                                <div className="flex gap-2 bg-white/50 p-1.5 rounded-2xl border border-slate-100 shadow-sm">
+                                                <div className="flex gap-2 bg-white/50 dark:bg-slate-800/90 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-600 shadow-sm">
                                                     <button
                                                         onClick={() => {
                                                             setPage(0);
+                                                            setSearchQuery('');
                                                             setIncidentFilter('Active');
                                                         }}
-                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'Active' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
+                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'Active' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}
                                                     >
                                                         {t('active_queue')}
                                                     </button>
                                                     <button
                                                         onClick={() => {
                                                             setPage(0);
+                                                            setSearchQuery('');
                                                             setIncidentFilter('History');
                                                         }}
-                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'History' ? 'bg-slate-900 text-white shadow-lg shadow-slate-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
+                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'History' ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-lg shadow-slate-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}
                                                     >
                                                         {t('incident_history')}
                                                     </button>
@@ -1306,7 +1380,7 @@ export default function AdminDashboard() {
                                                 {incidentFilter === 'History' && (
                                                     <button
                                                         onClick={exportIncidentHistory}
-                                                        className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2"
+                                                        className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2"
                                                     >
                                                         <CreditCard size={14} /> {t('download_history')}
                                                     </button>
@@ -1327,7 +1401,7 @@ export default function AdminDashboard() {
                                                 ))
                                             ) : (
                                                 <>
-                                                    {filtered.map((incident) => {
+                                                    {incidentsForDisplay.map((incident) => {
                                                         const sla = getSlaStatus(incident);
                                                         return (
                                                             <div key={incident.id} onClick={() => setSelectedIncident(incident)} className={`p-4 border rounded-xl cursor-pointer flex justify-between items-center group transition-all ${sla.isBreached ? 'bg-rose-50 border-rose-200 hover:bg-rose-100 animate-pulse-soft' : 'hover:bg-slate-50'}`}>
@@ -1362,15 +1436,25 @@ export default function AdminDashboard() {
                                                     })}
                                                     {filtered.length === 0 && (
                                                         <div className="text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                                                            <p className="text-slate-400 font-bold mb-1">{t('no_incidents_match', { query: searchQuery })}</p>
-                                                            <p className="text-[10px] text-slate-300 uppercase tracking-widest leading-loose">Try a different search term or clear the filter</p>
+                                                            <p className="text-slate-400 font-bold mb-1 max-w-md mx-auto">
+                                                                {q
+                                                                    ? t('no_incidents_match', { query: searchQuery })
+                                                                    : incidentFilter === 'History'
+                                                                        ? t('admin_incident_history_empty')
+                                                                        : t('admin_active_queue_empty')}
+                                                            </p>
+                                                            {q ? (
+                                                                <p className="text-[10px] text-slate-300 uppercase tracking-widest leading-loose">{t('adjust_search')}</p>
+                                                            ) : null}
                                                         </div>
                                                     )}
                                                 </>
                                             )}
                                             <Pagination
                                                 currentPage={page}
-                                                totalItems={stats.total}
+                                                totalItems={
+                                                    incidentFilter === 'History' ? filtered.length : stats.total
+                                                }
                                                 pageSize={PAGE_SIZE}
                                                 onPageChange={setPage}
                                             />
@@ -1638,18 +1722,23 @@ export default function AdminDashboard() {
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100 font-bold text-sm text-slate-700">
                                                     {(() => {
+                                                        const bq = searchQuery.trim();
                                                         const filtered = bills.filter(bill =>
-                                                            (bill.profiles?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                                            (bill.id || '').toString().includes(searchQuery) ||
-                                                            bill.account_no.includes(searchQuery)
+                                                            (bill.profiles?.full_name || '').toLowerCase().includes(bq.toLowerCase()) ||
+                                                            (bill.id || '').toString().includes(bq) ||
+                                                            (bill.account_no || '').toLowerCase().includes(bq.toLowerCase())
                                                         );
 
                                                         if (filtered.length === 0) {
                                                             return (
                                                                 <tr>
                                                                     <td colSpan="7" className="py-20 text-center">
-                                                                        <p className="text-slate-400 font-bold mb-1">No billing records found matching "{searchQuery}"</p>
-                                                                        <p className="text-[10px] text-slate-300 uppercase tracking-widest leading-loose">Verify the account number or name and try again</p>
+                                                                        <p className="text-slate-400 font-bold mb-1">
+                                                                            {bq ? `No billing records found matching "${searchQuery}"` : t('no_bills_found')}
+                                                                        </p>
+                                                                        {bq ? (
+                                                                            <p className="text-[10px] text-slate-300 uppercase tracking-widest leading-loose">Verify the account number or name and try again</p>
+                                                                        ) : null}
                                                                     </td>
                                                                 </tr>
                                                             );
