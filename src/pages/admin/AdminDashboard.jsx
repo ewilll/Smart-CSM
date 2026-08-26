@@ -6,6 +6,7 @@ import { getCurrentUser, isAuthenticated, updateUserProfile, sendPasswordResetEm
 import { supabase } from '../../utils/supabaseClient';
 import AdminAnalytics from '../../components/admin/AdminAnalytics';
 import DashboardHeader from '../../components/common/DashboardHeader';
+import Pagination from '../../components/common/Pagination';
 import {
     Activity,
     CheckCircle,
@@ -62,7 +63,8 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 export default function AdminDashboard() {
-    const [user, setUser] = useState(null);
+    // Sync with session already validated by AdminRoute — avoids a blank first paint (`return null` until useEffect).
+    const [user, setUser] = useState(() => getCurrentUser());
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [incidents, setIncidents] = useState([]);
     const [allIncidents, setAllIncidents] = useState([]); // For Analytics
@@ -133,6 +135,7 @@ export default function AdminDashboard() {
     const [incidentFilter, setIncidentFilter] = useState('Active'); // 'Active' | 'History'
     const [residentSearchQuery, setResidentSearchQuery] = useState('');
     const [isResidentDropdownOpen, setIsResidentDropdownOpen] = useState(false);
+    const [pulseFeed, setPulseFeed] = useState([]);
 
     const navigate = useNavigate();
     const { language } = usePreferences() || { language: 'EN' };
@@ -732,9 +735,14 @@ export default function AdminDashboard() {
 
     const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-    if (!user) return null;
-
-    // Filter transactions logic could go here
+    if (!user) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600 gap-3">
+                <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+                <p className="text-sm font-semibold">Loading admin workspace…</p>
+            </div>
+        );
+    }
 
     return (
         <div className="dashboard-layout relative min-h-screen">
@@ -844,7 +852,7 @@ export default function AdminDashboard() {
                                 currentTab === 'incidents' && (() => {
                                     const listToFilter = searchQuery ? allIncidents : incidents;
                                     const filtered = listToFilter.filter(i => {
-                                        const matchesSearch = i.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        const matchesSearch = (i.type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                                             (i.user_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                                             (i.id || '').toString().includes(searchQuery);
 

@@ -92,35 +92,34 @@ export default function SignUp() {
         setLoading(true);
 
         try {
-            // Create a Promise race between the registration and a timeout
+            localStorage.setItem('smart_csm_auth_intent', 'signup');
+
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Request timed out. Please check your connection.')), 20000)
             );
 
-            // Pass captchaToken to auth
             const registrationPromise = registerUser({ name, email, password, role, captchaToken, phone, barangay });
 
             const result = await Promise.race([registrationPromise, timeoutPromise]);
 
             if (result.success) {
                 setSuccess(true);
-                // Redirect will be handled by AuthHandler in App.jsx
             } else {
-                // Check if user already exists
                 if (result.message && (result.message.toLowerCase().includes('already registered') || result.message.includes('422'))) {
-                    // Attempt Auto-Login
                     console.log("User exists, attempting auto-login...");
+                    localStorage.setItem('smart_csm_auth_intent', 'login');
                     const loginResult = await loginUser(email, password);
 
                     if (loginResult.success) {
                         setSuccess(true);
-                        // Redirect will be handled by AuthHandler in App.jsx
                         return;
                     }
                 }
+                localStorage.removeItem('smart_csm_auth_intent');
                 setError(result.message);
             }
         } catch (err) {
+            localStorage.removeItem('smart_csm_auth_intent');
             setError(err.message || 'An unexpected error occurred. Please try again.');
         } finally {
             setLoading(false);
