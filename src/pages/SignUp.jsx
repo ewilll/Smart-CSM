@@ -105,11 +105,12 @@ export default function SignUp() {
             return;
         }
 
-        if (!captchaToken && !isLocalIP) {
-            setError('Please verify you are not a robot.');
-            return;
-        }
-
+        // Disable reCAPTCHA check temporarily
+        // if (!captchaToken && !isLocalIP) {
+        //     setError('Please verify you are not a robot.');
+        //     setLoading(false);
+        //     return;
+        // }
         setLoading(true);
 
         try {
@@ -359,6 +360,7 @@ export default function SignUp() {
                                 )}
                             </button>
 
+                            {/* ReCAPTCHA Temporarily Disabled
                             {!isLocalIP ? (
                                 <div className="flex justify-center mt-4">
                                     <ReCAPTCHA
@@ -375,6 +377,7 @@ export default function SignUp() {
                                     </p>
                                 </div>
                             )}
+                            */}
                         </form>
 
                         <div className="relative my-6">

@@ -60,11 +60,12 @@ export default function Login() {
         setError('');
         setLoading(true);
 
-        if (!captchaToken && !isLocalIP) {
-            setError('Please verify you are not a robot.');
-            setLoading(false);
-            return;
-        }
+        // Disable reCAPTCHA check temporarily
+        // if (!captchaToken && !isLocalIP) {
+        //     setError('Please verify you are not a robot.');
+        //     setLoading(false);
+        //     return;
+        // }
 
         try {
             // AuthHandler only navigates after SIGNED_IN when this flag is set (same as Google login).
@@ -236,6 +237,7 @@ export default function Login() {
                             )}
                         </button>
 
+                        {/* ReCAPTCHA Temporarily Disabled
                         {!isLocalIP ? (
                             <div className="flex justify-center mt-4">
                                 <ReCAPTCHA
@@ -251,6 +253,7 @@ export default function Login() {
                                 </p>
                             </div>
                         )}
+                        */}
                     </form>
 
                     <div className="relative my-6">
