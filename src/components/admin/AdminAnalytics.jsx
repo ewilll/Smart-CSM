@@ -14,6 +14,7 @@ import {
     AreaChart,
     Area
 } from 'recharts';
+import { FileSpreadsheet, Users, AlertCircle, TrendingUp } from 'lucide-react';
 import { usePreferences } from '../../context/PreferencesContext';
 import { useTranslation } from '../../utils/translations';
 
@@ -102,6 +103,34 @@ export default function AdminAnalytics({ incidents = [], users = [], onSwitchTab
         return last7Days;
     };
     const activityData = processWeeklyActivity();
+
+    // 3. Types of incidents vis-à-vis location
+    const processIncidentLocation = () => {
+        const locationMap = {};
+        
+        safeIncidents.forEach(i => {
+            const loc = i.location || 'Unknown';
+            const type = i.type || 'Other';
+            
+            if (!locationMap[loc]) {
+                locationMap[loc] = { name: loc };
+            }
+            if (!locationMap[loc][type]) {
+                locationMap[loc][type] = 0;
+            }
+            locationMap[loc][type]++;
+        });
+
+        // Convert to array and sort by total incidents
+        return Object.values(locationMap).sort((a, b) => {
+            const totalA = Object.keys(a).filter(k => k !== 'name').reduce((sum, k) => sum + a[k], 0);
+            const totalB = Object.keys(b).filter(k => k !== 'name').reduce((sum, k) => sum + b[k], 0);
+            return totalB - totalA;
+        }).slice(0, 5); // Top 5 locations
+    };
+    const locationData = processIncidentLocation();
+    // Get unique incident types for the stacked bars
+    const incidentTypes = [...new Set(safeIncidents.map(i => i.type || 'Other'))];
 
     const handleDownloadCSV = () => {
         if (!safeIncidents.length) return;
@@ -264,6 +293,25 @@ export default function AdminAnalytics({ incidents = [], users = [], onSwitchTab
                     </ResponsiveContainer>
                 </div>
             </div>
-        </div >
+
+            {/* Bar Chart - Types of incidents vis-à-vis location */}
+            <div className="bg-white/60 backdrop-blur-sm p-6 rounded-3xl shadow-sm border border-white/30">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Types of Incidents by Location (Top 5)</h4>
+                <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={locationData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                            <YAxis axisLine={false} tickLine={false} />
+                            <Tooltip cursor={{ fill: '#f1f5f9' }} />
+                            <Legend />
+                            {incidentTypes.map((type, index) => (
+                                <Bar key={type} dataKey={type} stackId="a" fill={COLORS[index % COLORS.length]} barSize={40} />
+                            ))}
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+        </div>
     );
 }

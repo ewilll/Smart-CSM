@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, ChevronDown, X, MessageSquare, Settings, Clock, AlertCircle, Info, CheckCircle2, MoreHorizontal, Trash2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Bell, ChevronDown, X, MessageSquare, Settings, Clock, AlertCircle, Info, CheckCircle2, MoreHorizontal, Trash2, Menu } from 'lucide-react';
 import ProfileManagementModal from '../modals/ProfileManagementModal';
 import { useNotifications } from '../../context/NotificationContext';
 import { usePreferences } from '../../context/PreferencesContext';
@@ -20,6 +19,7 @@ import { useTranslation } from '../../utils/translations';
  * @param {string} iconBgColor - Background color for icon
  * @param {boolean} showNotifications - State for notifications (controlled)
  * @param {function} setShowNotifications - Notification toggle function (controlled)
+ * @param {function} toggleSidebar - Function to toggle the mobile sidebar
  */
 export default function DashboardHeader({
     user,
@@ -32,7 +32,8 @@ export default function DashboardHeader({
     icon,
     iconBgColor,
     showNotifications: controlledShowNotifications,
-    setShowNotifications: controlledSetShowNotifications
+    setShowNotifications: controlledSetShowNotifications,
+    toggleSidebar
 }) {
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [internalShowNotifications, setInternalShowNotifications] = useState(false);
@@ -102,19 +103,26 @@ export default function DashboardHeader({
 
     return (
         <>
-            <div className="header-container mb-12 space-y-8">
+            <div className="header-container w-full max-w-full">
                 {/* Primary Interaction Row (Profile & Global Search) */}
-                <header className="top-bar flex items-center justify-between gap-6">
-                    <div className="profile-actions flex items-center gap-4 relative">
+                <header className="top-bar flex flex-col sm:flex-row sm:justify-between w-full max-w-full gap-4">
+                    <div className="profile-actions flex flex-wrap items-center gap-2 sm:gap-4 relative w-full sm:w-auto justify-start">
+                        {/* Hamburger Menu (Mobile Only) */}
+                        {toggleSidebar && (
+                            <button onClick={toggleSidebar} className="md:hidden p-2 text-slate-500 hover:text-blue-600 transition-colors">
+                                <Menu size={24} />
+                            </button>
+                        )}
+                        
                         {/* User Profile - LEFT */}
                         <div
                             onClick={() => setIsProfileModalOpen(true)}
-                            className="user-profile pl-2 pr-6 h-14 flex items-center gap-4 bg-white/50 backdrop-blur-md rounded-2xl border border-white/30 shadow-lg cursor-pointer hover:bg-white hover:scale-[1.02] transition-all group"
+                            className="user-profile cursor-pointer"
                         >
                             <img
                                 src={user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=0D8ABC&color=fff`}
                                 alt="Profile"
-                                className="avatar w-10 h-10 ring-4 ring-white group-hover:ring-blue-100 transition-all rounded-full object-cover"
+                                className="avatar"
                             />
                             <div className="hidden md:block text-left">
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">
@@ -130,7 +138,7 @@ export default function DashboardHeader({
                         {/* Settings Button */}
                         <button
                             onClick={handleSettingsClick}
-                            className="icon-btn w-14 h-14 relative bg-slate-100 text-slate-500 border border-slate-200 rounded-2xl shadow-lg hover:bg-white hover:text-blue-600 hover:scale-110 active:scale-95 transition-all flex items-center justify-center group"
+                            className="icon-btn ml-auto"
                             title="Settings"
                         >
                             <Settings size={22} className="group-hover:rotate-90 transition-transform duration-500" />
@@ -140,25 +148,19 @@ export default function DashboardHeader({
                         <div className="relative" ref={notificationRef}>
                             <button
                                 onClick={() => setShowNotifications(!showNotifications)}
-                                className={`icon-btn w-14 h-14 relative border rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center ${showNotifications ? 'bg-blue-700 text-white border-blue-700' : 'bg-blue-600 text-white border-blue-600 shadow-blue-500/30'}`}
+                                className={`icon-btn ${showNotifications ? 'active' : ''}`}
                             >
                                 <Bell size={22} />
                                 {unreadCount > 0 && (
-                                    <span className="absolute -top-2 -right-2 h-6 min-w-[24px] px-1 bg-rose-500 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-rose-500/40 animate-pulse">
+                                    <span className="absolute -top-2 -right-2 h-6 min-w-[24px] px-1 bg-rose-500 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black text-white shadow-sm animate-pulse">
                                         {unreadCount > 99 ? '99+' : unreadCount}
                                     </span>
                                 )}
                             </button>
 
                             {/* Notification Dropdown */}
-                            <AnimatePresence>
-                                {showNotifications && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute top-full left-0 mt-4 w-80 bg-white rounded-3xl shadow-2xl shadow-slate-900/20 border border-slate-100 z-[100] overflow-hidden"
-                                    >
+                            {showNotifications && (
+                                <div className="absolute right-0 sm:right-auto sm:left-0 top-full mt-2 w-[320px] sm:w-[380px] bg-white border border-slate-200 rounded-2xl shadow-xl z-[9999] overflow-hidden">
                                         <div className="p-5 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
                                             <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{t('notifications')}</h3>
                                             <div className="flex items-center gap-3">
@@ -174,8 +176,8 @@ export default function DashboardHeader({
                                             </div>
                                         </div>
                                         <div className="max-h-[350px] overflow-y-auto">
-                                            {notifications.length > 0 ? (
-                                                notifications.map((notif) => (
+                                            {notifications.filter(n => !n.read).length > 0 ? (
+                                                notifications.filter(n => !n.read).map((notif) => (
                                                     <NotificationItem
                                                         key={notif.id}
                                                         notif={notif}
@@ -201,19 +203,18 @@ export default function DashboardHeader({
                                         >
                                             {t('viewAll')}
                                         </button>
-                                    </motion.div>
+                                    </div>
                                 )}
-                            </AnimatePresence>
                         </div>
                     </div>
 
                     {/* Global Search - RIGHT */}
-                    <div className="search-bar hidden md:flex flex-1 max-w-xl h-14 px-6 bg-white rounded-2xl border border-slate-200 shadow-lg shadow-blue-900/5 group focus-within:ring-2 focus-within:ring-blue-600/20 transition-all">
-                        <Search size={20} className="text-slate-400 group-focus-within:text-blue-600 transition-colors self-center" />
+                    <div className="search-bar w-full sm:w-auto min-w-0">
+                        <Search size={20} className="text-slate-400 group-focus-within:text-blue-600 transition-colors self-center shrink-0" />
                         <input
                             type="text"
                             placeholder={placeholder || t('searchPlace')}
-                            className="search-input ml-4 font-bold text-slate-700 placeholder:text-slate-400 outline-none w-full bg-transparent"
+                            className="search-input ml-4 font-bold text-slate-700 placeholder:text-slate-400 outline-none w-full bg-transparent min-w-0"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -227,15 +228,15 @@ export default function DashboardHeader({
 
                 {/* Secondary Row (Status/Breadcrumb) - Optional */}
                 {title && (
-                    <div className="flex items-center gap-3 sm:gap-6 animate-fade-in pl-2">
+                    <div className="flex items-center gap-3 mt-6 mb-6 pl-2">
                         {icon && (
-                            <div className={`p-3 sm:p-4 rounded-[18px] sm:rounded-[22px] text-white shadow-xl shadow-blue-500/20 ${iconBgColor || 'bg-gradient-to-br from-blue-600 to-indigo-600'} shrink-0`}>
-                                {React.cloneElement(icon, { size: 20, className: 'sm:w-7 sm:h-7' })}
+                            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
+                                {React.cloneElement(icon, { size: 20 })}
                             </div>
                         )}
                         <div className="min-w-0">
-                            <h2 className="text-xl sm:text-3xl font-black text-slate-800 tracking-tight leading-none mb-1 sm:mb-2 truncate">{title}</h2>
-                            <p className="text-[10px] sm:text-sm text-slate-500 font-bold uppercase tracking-widest truncate">{subtitle}</p>
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
+                            {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
                         </div>
                     </div>
                 )}
@@ -274,13 +275,13 @@ function NotificationItem({ notif, formatTime, getIcon, markAsRead, toggleRead, 
 
     return (
         <div
-            className={`p-4 hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-50 flex gap-4 group relative ${!notif.read ? 'bg-blue-50/20' : ''}`}
+            className={`p-4 bg-white hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100 flex gap-4 group relative ${!notif.read ? 'bg-blue-50/20' : ''}`}
             onClick={() => {
                 if (!notif.read) markAsRead(notif.id);
                 if (notif.link) navigate(notif.link);
             }}
         >
-            <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center shrink-0 border border-slate-100">
+            <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center shrink-0 border border-slate-100">
                 {getIcon(notif.type)}
             </div>
             <div className="flex-1 min-w-0 pr-6">
@@ -310,45 +311,38 @@ function NotificationItem({ notif, formatTime, getIcon, markAsRead, toggleRead, 
                 </button>
 
                 {/* Dropdown Menu */}
-                <AnimatePresence>
-                    {menuOpen && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.9, y: -10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                            className="absolute right-0 top-full mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-[110] py-2"
+                {menuOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 z-[9999] py-2">
+                        <button
+                            onClick={(e) => handleAction(e, 'toggle')}
+                            className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
                         >
-                            <button
-                                onClick={(e) => handleAction(e, 'toggle')}
-                                className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
-                            >
-                                <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                                    <Clock size={12} />
-                                </div>
-                                {notif.read ? t('markAsUnread') : t('markAsRead')}
-                            </button>
-                            <button
-                                onClick={(e) => handleAction(e, 'delete')}
-                                className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-3 transition-colors"
-                            >
-                                <div className="w-6 h-6 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
-                                    <Trash2 size={12} />
-                                </div>
-                                {t('delete_notif')}
-                            </button>
-                            <div className="mx-2 my-1 border-t border-slate-50"></div>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }}
-                                className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-400 hover:bg-slate-50 flex items-center gap-3 transition-colors"
-                            >
-                                <div className="w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
-                                    <AlertCircle size={12} />
-                                </div>
-                                {t('support_help')}
-                            </button>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                            <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                                <Clock size={12} />
+                            </div>
+                            {notif.read ? t('markAsUnread') : t('markAsRead')}
+                        </button>
+                        <button
+                            onClick={(e) => handleAction(e, 'delete')}
+                            className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-3 transition-colors"
+                        >
+                            <div className="w-6 h-6 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
+                                <Trash2 size={12} />
+                            </div>
+                            {t('delete_notif')}
+                        </button>
+                        <div className="mx-2 my-1 border-t border-slate-50"></div>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }}
+                            className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-400 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                        >
+                            <div className="w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+                                <AlertCircle size={12} />
+                            </div>
+                            {t('support_help')}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

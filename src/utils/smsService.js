@@ -1,58 +1,67 @@
-// In a real production app, you would NEVER put your Twilio keys in frontend code 
-// or execute this directly from React. It should be triggered from a secure Node.js 
-// or Python backend. For the purpose of this demo under a 'No Backend API' context,
-// we are mocking the service connection. If you want this to work genuinely, 
-// you would enter real keys below and ensure it runs securely.
+export const sendSmsToUser = async (user, messageTemplate) => {
+    const apiKey = import.meta.env.VITE_SMS_API_KEY;
+
+    if (!user || !user.phone) {
+        console.warn("No valid phone number for user:", user?.email);
+        return { success: false, message: 'No phone number provided.' };
+    }
+
+    if (!apiKey) {
+        console.log(`[Mock SMS Sent to ${user.phone}] \n${messageTemplate}`);
+        window.dispatchEvent(new CustomEvent('sms-sent', { detail: { to: user.phone, message: messageTemplate } }));
+        return { success: true };
+    }
+
+    try {
+        console.log(`[Semaphore API] Sending SMS to ${user.phone}...`);
+        
+        // Dispatch event for UI demonstration BEFORE fetch in case of CORS or API issues
+        window.dispatchEvent(new CustomEvent('sms-sent', { detail: { to: user.phone, message: messageTemplate } }));
+
+        const response = await fetch('https://api.semaphore.co/api/v4/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ 
+                apikey: apiKey, 
+                number: user.phone, 
+                message: messageTemplate 
+            })
+        });
+        
+        const data = await response.json();
+        console.log('[Semaphore API Response]', data);
+
+        return { success: true, data };
+    } catch (error) {
+        console.error("SMS Send Failed:", error);
+        return { success: false, message: error.message };
+    }
+};
 
 export const broadcastSmsToResidents = async (announcement, users) => {
-    console.log("Preparing SMS Broadcast via Twilio...");
+    console.log("Preparing SMS Broadcast via Semaphore...");
 
-    // Filter to get only customer users who have phone numbers
-    const targetUsers = users.filter(u => u.role === 'customer' && u.phone);
+    // Filter to get only customer users who have phone numbers, and optionally match location
+    let targetUsers = users.filter(u => u.role === 'customer' && u.phone);
+
+    if (announcement.location) {
+        targetUsers = targetUsers.filter(u => 
+            u.barangay && u.barangay.toLowerCase() === announcement.location.toLowerCase()
+        );
+    }
 
     if (targetUsers.length === 0) {
-        console.warn("No registered users with valid phone numbers to send SMS to.");
+        console.warn("No registered users with valid phone numbers in the target location.");
         return { success: false, message: 'No registered phone numbers found.' };
     }
 
-    const messageTemplate = `PRIMEWATER ALERT\n[${announcement.type.toUpperCase()}]\n\n${announcement.title}\n\n${announcement.content}`;
+    const messageTemplate = `PRIMEWATER ALERT\n[${announcement.type.toUpperCase()}]\nLocation: ${announcement.location || 'All Areas'}\n\n${announcement.title}\n\n${announcement.content}`;
+
+    const sendPromises = targetUsers.map(user => sendSmsToUser(user, messageTemplate));
 
     try {
-        /* 
-        // --- REAL TWILIO IMPLEMENTATION COMMENTED OUT FOR SECURITY ---    
-        const TWILIO_ACCOUNT_SID = 'YOUR_TWILIO_SID';
-        const TWILIO_AUTH_TOKEN = 'YOUR_TWILIO_TOKEN';
-        const TWILIO_PHONE_NUMBER = 'YOUR_TWILIO_NUMBER';
-        
-        // This would require twilio to be imported, but typically twilio SDK is Node only.
-        // Because this is running in the browser (React), fetching the Twilio API manually via HTTP is required if no backend exists.
-        
-        const sendPromises = targetUsers.map(user => {
-            const formData = new URLSearchParams();
-            formData.append('To', user.phone);
-            formData.append('From', TWILIO_PHONE_NUMBER);
-            formData.append('Body', messageTemplate);
-
-            return fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)
-                },
-                body: formData.toString()
-            });
-        });
-
         await Promise.all(sendPromises);
-        */
-
-        // MOCK SUCCESS FOR DEMONSTRATION
-        console.log(`[Twilio Mock] Successfully broadcasted to ${targetUsers.length} numbers:`, targetUsers.map(u => u.phone));
-        console.log(`[Twilio Mock] Message Sent: \n${messageTemplate}`);
-
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
+        console.log(`[SMS Broadcast] Successfully sent to ${targetUsers.length} numbers.`);
         return { success: true, count: targetUsers.length };
     } catch (error) {
         console.error("SMS Broadcast Failed:", error);

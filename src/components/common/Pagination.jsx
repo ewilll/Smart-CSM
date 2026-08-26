@@ -40,12 +40,12 @@ const Pagination = ({ currentPage, totalItems, pageSize, onPageChange }) => {
     };
 
     return (
-        <div className="flex items-center justify-between mt-8 px-2">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+        <div className="flex flex-col sm:flex-row items-center justify-between mt-8 px-2 gap-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center sm:text-left">
                 Showing <span className="text-slate-600">{currentPage * pageSize + 1}</span> to <span className="text-slate-600">{Math.min((currentPage + 1) * pageSize, totalItems)}</span> of <span className="text-slate-600">{totalItems}</span>
             </p>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                     onClick={() => onPageChange(currentPage - 1)}
                     disabled={currentPage === 0}

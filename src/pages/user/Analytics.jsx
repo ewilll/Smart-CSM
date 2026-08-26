@@ -116,25 +116,26 @@ export default function Analytics() {
                     setSearchQuery={setSearchQuery}
                     title="System Status"
                     subtitle="Real-time Service Monitoring"
-                    icon={<BarChart size={28} />}
-                    iconBgColor="bg-gradient-to-br from-blue-600 to-indigo-600"
+                    icon={<BarChart size={28} toggleSidebar={toggleSidebar}
+                    />}
+                    iconBgColor="bg-blue-600"
                 />
 
                 {/* Additional Status Row for Analytics */}
                 <div className="flex items-center gap-4 mb-8">
                     <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-xl">
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
                         <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Network Online</span>
                     </div>
                 </div>
 
                 {/* Filters Row */}
                 <div className="flex flex-wrap items-center gap-4 mb-10">
-                    <div className="flex items-center gap-3 px-8 py-4 bg-white/80 backdrop-blur-md rounded-2xl border border-white/50 shadow-xl shadow-blue-900/5 font-black text-xs uppercase tracking-widest text-slate-600">
+                    <div className="flex items-center gap-3 px-8 py-4 bg-white rounded-xl border border-slate-100 shadow-sm font-black text-xs uppercase tracking-widest text-slate-600">
                         <Calendar size={18} className="text-blue-600" />
                         <span>Today: Feb 18, 2026</span>
                     </div>
-                    <div className="flex items-center gap-3 px-8 py-4 bg-white/80 backdrop-blur-md rounded-2xl border border-white/50 shadow-xl shadow-blue-900/5 font-black text-xs uppercase tracking-widest text-emerald-600">
+                    <div className="flex items-center gap-3 px-8 py-4 bg-white rounded-xl border border-slate-100 shadow-sm font-black text-xs uppercase tracking-widest text-emerald-600">
                         <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
                         <span>Zone 4: Stable</span>
                     </div>
@@ -144,7 +145,7 @@ export default function Analytics() {
                 <div className="grid lg:grid-cols-2 gap-10 mb-10">
                     <div
                         onClick={() => navigate('/bills')}
-                        className="floating-card p-10 flex flex-col group cursor-pointer hover:shadow-2xl hover:shadow-blue-500/10 transition-all active:scale-[0.99]"
+                        className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 flex flex-col cursor-pointer hover:border-blue-200 transition-all"
                     >
                         <div className="card-header pb-6 border-b border-slate-100/50 mb-10 flex items-center justify-between">
                             <h3 className="text-xl font-black text-slate-800 tracking-tight">Your Consumption Trend (m³)</h3>
@@ -158,7 +159,7 @@ export default function Analytics() {
                                             {item.val}m³
                                         </div>
                                         <div
-                                            className="w-full bg-gradient-to-t from-blue-600 to-indigo-500 rounded-full shadow-lg shadow-blue-500/20 transition-all duration-1000 ease-out"
+                                            className="w-full bg-blue-600 rounded-t-md transition-all ease-out"
                                             style={{ height: `${Math.min(item.val * 10, 250)}px` }}
                                         ></div>
                                     </div>
@@ -175,7 +176,7 @@ export default function Analytics() {
 
                     <div
                         onClick={() => navigate('/service-map')}
-                        className="floating-card p-10 flex flex-col group cursor-pointer hover:shadow-2xl hover:shadow-blue-500/10 transition-all active:scale-[0.99]"
+                        className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 flex flex-col cursor-pointer hover:border-blue-200 transition-all"
                     >
                         <div className="card-header pb-6 border-b border-slate-100/50 mb-10 flex items-center justify-between">
                             <h3 className="text-xl font-black text-slate-800 tracking-tight">Network Availability</h3>
@@ -185,13 +186,7 @@ export default function Analytics() {
                             <div className="relative h-64 w-64 group-hover:scale-105 transition-transform duration-500">
                                 <svg className="w-full h-full -rotate-90">
                                     <circle cx="128" cy="128" r="110" fill="none" stroke="#f1f5f9" strokeWidth="24" />
-                                    <circle cx="128" cy="128" r="110" fill="none" stroke="url(#blueGrad)" strokeWidth="24" strokeDasharray="691" strokeDashoffset="69" strokeLinecap="round" className="drop-shadow-xl" />
-                                    <defs>
-                                        <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                            <stop offset="0%" stopColor="#2563eb" />
-                                            <stop offset="100%" stopColor="#06b6d4" />
-                                        </linearGradient>
-                                    </defs>
+                                    <circle cx="128" cy="128" r="110" fill="none" stroke="#2563EB" strokeWidth="24" strokeDasharray="691" strokeDashoffset="69" strokeLinecap="round" className="drop-shadow-sm" />
                                 </svg>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                                     <span className="text-5xl font-black text-slate-800 tracking-tighter">{stats.uptime}%</span>
@@ -213,7 +208,7 @@ export default function Analytics() {
                 </div>
 
                 {/* Maintenance Log */}
-                <div className="floating-card p-10">
+                <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h3 className="text-xl font-black text-slate-800 tracking-tight mb-1">Live Maintenance Log</h3>

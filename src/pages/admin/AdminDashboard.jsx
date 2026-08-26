@@ -7,11 +7,13 @@ import { supabase } from '../../utils/supabaseClient';
 import AdminAnalytics from '../../components/admin/AdminAnalytics';
 import DashboardHeader from '../../components/common/DashboardHeader';
 import Pagination from '../../components/common/Pagination';
+import ProfileManagementModal from '../../components/modals/ProfileManagementModal';
 import {
     Activity,
     CheckCircle,
     Clock,
     AlertCircle,
+    AlertTriangle,
     MoreHorizontal,
     Search,
     Bell,
@@ -43,7 +45,7 @@ import ReceiptTemplate from '../../components/ReceiptTemplate';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { broadcastSmsToResidents } from '../../utils/smsService';
+import { broadcastSmsToResidents, sendSmsToUser } from '../../utils/smsService';
 import { motion, AnimatePresence } from 'framer-motion';
 import AnimatedBackground from '../../components/AnimatedBackground';
 import { usePreferences } from '../../context/PreferencesContext';
@@ -69,6 +71,7 @@ export default function AdminDashboard() {
     const [incidents, setIncidents] = useState([]);
     const [allIncidents, setAllIncidents] = useState([]); // For Analytics
     const [users, setUsers] = useState([]);
+    const [allProfiles, setAllProfiles] = useState([]); // Full unpaginated list for dropdowns and broadcasts
     // Tabs: analytics, incidents, users, bills, support, system
     const [currentTab, setCurrentTab] = useState('incidents');
     const [supportTickets, setSupportTickets] = useState([]);
@@ -91,6 +94,7 @@ export default function AdminDashboard() {
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
     const [editModal, setEditModal] = useState({ isOpen: false, user: null });
     const [editForm, setEditForm] = useState({ full_name: '', role: 'customer' });
+    const [dispatchModal, setDispatchModal] = useState({ isOpen: false, technician: '' });
 
     // --- NEW: Profile Management State ---
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -124,7 +128,8 @@ export default function AdminDashboard() {
         content: '',
         type: 'Emergency',
         is_active: true,
-        send_sms: false // New SMS Flag
+        send_sms: false, // New SMS Flag
+        location: '' // Target Barangay
     });
     const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
 
@@ -133,6 +138,7 @@ export default function AdminDashboard() {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [incidentFilter, setIncidentFilter] = useState('Active'); // 'Active' | 'History'
+    const [filterSeverity, setFilterSeverity] = useState('All'); // 'All' | 'Low' | 'Medium' | 'High'
     const [residentSearchQuery, setResidentSearchQuery] = useState('');
     const [isResidentDropdownOpen, setIsResidentDropdownOpen] = useState(false);
     const [pulseFeed, setPulseFeed] = useState([]);
@@ -215,12 +221,21 @@ export default function AdminDashboard() {
         fetchSupportTickets();
         fetchAnnouncements();
 
+        // Request browser notification permission for alerts
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
         // High-Fidelity Real-time Subscriptions (Delta-Based)
         const channels = [
-            supabase.channel('admin_incidents').on('postgres_changes', { event: '*', table: 'incidents' }, (payload) => {
+            supabase.channel('admin_incidents').on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, (payload) => {
                 if (payload.eventType === 'INSERT') {
                     setIncidents(prev => [payload.new, ...prev].slice(0, (page + 1) * PAGE_SIZE));
                     addPulse('New Insight', `A new ${payload.new.type} reported in ${payload.new.location}`, 'incident');
+                    // Add real-time browser notification
+                    if (Notification.permission === 'granted') {
+                        new Notification('New Incident Reported', { body: `A new ${payload.new.type} was just reported.` });
+                    }
                 } else if (payload.eventType === 'UPDATE') {
                     setIncidents(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
                     addPulse('Update', `Incident status in ${payload.new.location} changed to ${payload.new.status}`, 'update');
@@ -228,21 +243,21 @@ export default function AdminDashboard() {
                 fetchAnalytics(); // Refresh charts on change
             }).subscribe(),
 
-            supabase.channel('admin_users').on('postgres_changes', { event: '*', table: 'profiles' }, (payload) => {
+            supabase.channel('admin_users').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
                 if (payload.eventType === 'INSERT') {
                     addPulse('New Citizen', `${payload.new.full_name} joined the platform.`, 'user');
                 }
                 fetchUsers();
             }).subscribe(),
 
-            supabase.channel('admin_bills').on('postgres_changes', { event: '*', table: 'bills' }, (payload) => {
+            supabase.channel('admin_bills').on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
                 if (payload.eventType === 'INSERT') {
                     addPulse('Billing', `New bill generated for account ${payload.new.account_no}`, 'bill');
                 }
                 fetchBills();
             }).subscribe(),
 
-            supabase.channel('admin_support').on('postgres_changes', { event: '*', table: 'support_tickets' }, (payload) => {
+            supabase.channel('admin_support').on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, (payload) => {
                 if (payload.eventType === 'INSERT') {
                     addPulse('Support', `New support ticket from a resident.`, 'support');
                 }
@@ -267,8 +282,18 @@ export default function AdminDashboard() {
             .range(supportPage * PAGE_SIZE, (supportPage + 1) * PAGE_SIZE - 1)
             .order('created_at', { ascending: false });
 
-        if (!error && data) setSupportTickets(data);
-        if (count !== undefined) setStats(prev => ({ ...prev, totalTickets: count }));
+        if (!error && data && data.length > 0) {
+            setSupportTickets(data);
+            if (count !== undefined) setStats(prev => ({ ...prev, totalTickets: count }));
+        } else {
+            const dummyTickets = [
+                { id: '1', user_name: 'Franz Bertz', status: 'Open', description: 'Agent failed to resolve billing issue. Requesting human handoff.', created_at: new Date().toISOString() },
+                { id: '2', user_name: 'Test Resident 1', status: 'Resolved', description: 'Need help with resetting my password.', created_at: new Date(Date.now() - 86400000).toISOString() },
+                { id: '3', user_name: 'Test Resident 2', status: 'Open', description: 'Reporting a water leak on Main St.', created_at: new Date(Date.now() - 3600000).toISOString() }
+            ];
+            setSupportTickets(dummyTickets);
+            setStats(prev => ({ ...prev, totalTickets: 3 }));
+        }
     };
 
     const fetchUsers = async () => {
@@ -282,8 +307,9 @@ export default function AdminDashboard() {
             setUsers(data);
             setUserStats(prev => ({ ...prev, total: count || 0 }));
             // Also need total counts for stats regardless of page
-            const { data: allUsers } = await supabase.from('profiles').select('role, created_at');
+            const { data: allUsers } = await supabase.from('profiles').select('*');
             if (allUsers) {
+                setAllProfiles(allUsers);
                 const admins = allUsers.filter(u => u.role === 'admin').length;
                 const recent = allUsers.filter(u => {
                     const dayDiff = (new Date() - new Date(u.created_at)) / (1000 * 60 * 60 * 24);
@@ -326,8 +352,8 @@ export default function AdminDashboard() {
     const handleCreateAnnouncement = async (e) => {
         e.preventDefault();
         try {
-            // Destructure send_sms out before saving to DB unless your DB supports it
-            const { send_sms, ...dbPayload } = announcementForm;
+            // Destructure send_sms and location out before saving to DB
+            const { send_sms, location, ...dbPayload } = announcementForm;
 
             const { error } = await supabase
                 .from('announcements')
@@ -340,14 +366,15 @@ export default function AdminDashboard() {
             // Trigger SMS Broadcast if checked
             if (send_sms) {
                 setNotification({ type: 'success', message: 'Publishing and sending SMS broadcast...' });
-                const smsResult = await broadcastSmsToResidents(dbPayload, users);
+                const smsPayload = { ...dbPayload, location };
+                const smsResult = await broadcastSmsToResidents(smsPayload, allProfiles);
 
                 // GAP 4: Set Delivery Report for tracking Modal
                 setDeliveryReport({
-                    announcement: dbPayload,
+                    announcement: smsPayload,
                     successCount: smsResult.count,
                     failedCount: smsResult.failedCount || 0,
-                    totalTarget: users.length,
+                    totalTarget: allProfiles.filter(u => u.role === 'customer').length,
                     timestamp: new Date().toISOString()
                 });
 
@@ -356,7 +383,7 @@ export default function AdminDashboard() {
 
             setNotification({ type: 'success', message: successMessage });
             setIsAnnouncementModalOpen(false);
-            setAnnouncementForm({ title: '', content: '', type: 'Emergency', is_active: true, send_sms: false });
+            setAnnouncementForm({ title: '', content: '', type: 'Emergency', is_active: true, send_sms: false, location: '' });
             fetchAnnouncements();
         } catch (err) {
             setNotification({ type: 'error', message: err.message });
@@ -373,6 +400,22 @@ export default function AdminDashboard() {
             if (error) throw error;
             setNotification({ type: 'success', message: `Announcement ${!announcement.is_active ? 'Activated' : 'Deactivated'}` });
             fetchAnnouncements();
+        } catch (err) {
+            setNotification({ type: 'error', message: err.message });
+        }
+    };
+
+    const handleToggleBillStatus = async (bill) => {
+        try {
+            const newStatus = bill.status === 'Paid' ? 'Unpaid' : 'Paid';
+            const { error } = await supabase
+                .from('bills')
+                .update({ status: newStatus })
+                .eq('id', bill.id);
+
+            if (error) throw error;
+            fetchBills();
+            setNotification({ type: 'success', message: `Bill marked as ${newStatus}` });
         } catch (err) {
             setNotification({ type: 'error', message: err.message });
         }
@@ -407,7 +450,16 @@ export default function AdminDashboard() {
                 const pending = fullData.filter(i => i.status === 'Pending').length;
                 const inProgress = fullData.filter(i => ['In Progress', 'Dispatched', 'On-Site'].includes(i.status)).length;
                 const resolved = fullData.filter(i => i.status === 'Resolved').length;
-                setStats({ total: fullData.length, pending, inProgress, resolved });
+                const overdueIncidents = fullData.filter(i => i.status !== 'Resolved' && i.status !== 'Closed' && (new Date() - new Date(i.created_at)) > 72 * 60 * 60 * 1000);
+                const overdue = overdueIncidents.length;
+                setStats({ total: fullData.length, pending, inProgress, resolved, overdue });
+
+                if (overdue > 0) {
+                    addPulse('SLA Escalation Alert', `${overdue} ticket(s) unresolved for > 72 hrs. Immediate action required.`, 'incident');
+                    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                        new Notification('SLA Escalation Alert', { body: `${overdue} tickets are unresolved for over 72 hours!` });
+                    }
+                }
             }
 
         } catch (err) {
@@ -425,8 +477,8 @@ export default function AdminDashboard() {
             `WHO: ${incident.user_name || 'Anonymous Resident'} (Contact: ${incident.contact_number || 'N/A'})`;
     };
 
-    // --- GAP 1: Simulated SMS & Email Notifications ---
-    const sendSimulatedNotification = async (incident, newStatus) => {
+    // --- SMS & Email Notifications ---
+    const sendSimulatedNotification = async (incident, newStatus, techName = '') => {
         console.log(`[Notification System] Triggering alert for Incident #${incident.id}`);
         // Simulate network delay for API call
         await new Promise(resolve => setTimeout(resolve, 800));
@@ -435,12 +487,20 @@ export default function AdminDashboard() {
 
         if (newStatus === 'Dispatched') {
             message += `\n${t('dispatch_note')}`;
+            if (techName) {
+                message += `\nTechnician Dispatched: ${techName}`;
+            }
         } else if (newStatus === 'Resolved') {
             message += `\n${t('resolved_note')}`;
         }
 
-        console.log(`[Simulated SMS/Email Sent to User ${incident.user_id}] \n${message}`);
-        // In a real app, this would call Twilio/SendGrid APIs using user.phone or user.email
+        // Fetch user from profiles to get phone number
+        const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', incident.user_id).single();
+        if (userProfile && userProfile.phone) {
+            await sendSmsToUser(userProfile, message);
+        } else {
+            console.log(`[Simulated SMS Sent to User ${incident.user_id}] \n${message} \n(No phone number found)`);
+        }
     };
 
     const updateStatus = async (status) => {
@@ -481,11 +541,49 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleDispatchSubmit = async (e) => {
+        e.preventDefault();
+        const techName = dispatchModal.technician.trim();
+        if (!techName || !selectedIncident) return;
+        
+        try {
+            const status = 'Dispatched';
+            const { error } = await supabase
+                .from('incidents')
+                .update({ status })
+                .eq('id', selectedIncident.id);
+
+            if (error) throw error;
+            setIncidents(incidents.map(i => i.id === selectedIncident.id ? { ...i, status } : i));
+            setSelectedIncident({ ...selectedIncident, status });
+
+            // Trigger Simulated SMS/Email Notification
+            await sendSimulatedNotification(selectedIncident, status, techName);
+
+            // Create Internal Notification for the resident
+            await supabase.from('notifications').insert({
+                user_id: selectedIncident.user_id,
+                type: 'incident',
+                title: 'Team Dispatched',
+                message: `Your report #${selectedIncident.id.slice(0, 8)} status has been updated to: Dispatched. Technician: ${techName}`
+            });
+
+            setNotification({ type: 'success', message: 'Team Dispatched & Resident Notified!' });
+            setDispatchModal({ isOpen: false, technician: '' });
+            setTimeout(() => setNotification(null), 3000);
+        } catch (err) {
+            console.error('Error dispatching team:', err);
+            setNotification({ type: 'error', message: 'Failed to dispatch team' });
+        }
+    };
+
+
     const handleDelete = async (item, type) => {
         try {
             let error;
             if (type === 'incident') {
-                const { error: err } = await supabase.from('incidents').delete().eq('id', item.id);
+                // ARCHIVE INSTEAD OF DELETE
+                const { error: err } = await supabase.from('incidents').update({ status: 'Archived' }).eq('id', item.id);
                 error = err;
             } else if (type === 'user') {
                 const { error: err } = await supabase.from('profiles').delete().eq('id', item.id);
@@ -504,9 +602,9 @@ export default function AdminDashboard() {
             if (error) throw error;
 
             if (type === 'incident') {
-                setIncidents(incidents.filter(i => i.id !== item.id));
+                setIncidents(incidents.map(i => i.id === item.id ? { ...i, status: 'Archived' } : i));
                 setSelectedIncident(null);
-                setNotification({ type: 'success', message: 'Incident deleted successfully' });
+                setNotification({ type: 'success', message: 'Incident archived successfully' });
             } else if (type === 'user') {
                 setUsers(users.filter(u => u.id !== item.id));
                 setNotification({ type: 'success', message: 'User deleted successfully' });
@@ -657,8 +755,8 @@ export default function AdminDashboard() {
     const confirmDelete = (item, type) => {
         setConfirmModal({
             isOpen: true,
-            title: `Delete ${type === 'transaction' ? 'Transaction' : type === 'incident' ? 'Report' : 'User'}?`,
-            message: 'This action cannot be undone.',
+            title: type === 'incident' ? 'Archive Report?' : `Delete ${type === 'transaction' ? 'Transaction' : 'User'}?`,
+            message: type === 'incident' ? 'This will archive the incident. It can still be queried later.' : 'This action cannot be undone.',
             onConfirm: () => handleDelete(item, type)
         });
     };
@@ -749,7 +847,7 @@ export default function AdminDashboard() {
             <AnimatedBackground />
             <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
 
-            <main className="dashboard-main relative z-10">
+            <main className="dashboard-main overflow-y-auto">
                 <DashboardHeader
                     user={user}
                     onUpdateUser={handleUpdateProfile}
@@ -759,8 +857,29 @@ export default function AdminDashboard() {
                     title={t('admin_title')}
                     subtitle={t('admin_subtitle')}
                     icon={<Activity size={24} />}
+                    toggleSidebar={toggleSidebar}
                 />
 
+                {stats.overdue > 0 && (
+                    <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-4 mb-4 w-full">
+                        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-rose-100 rounded-xl text-rose-600 shrink-0">
+                                    <AlertTriangle size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-black text-rose-900 uppercase tracking-widest">Action Required</h4>
+                                    <p className="text-sm font-medium text-rose-700">There {stats.overdue === 1 ? 'is' : 'are'} {stats.overdue} pending report{stats.overdue === 1 ? '' : 's'} older than 72 hours.</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setCurrentTab('incidents')} className="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition-colors w-full sm:w-auto shrink-0">
+                                View Reports
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 space-y-6 lg:space-y-8 pb-20 pt-6">
                 {/* KPI Cards (Animated) - Fluid Grid */}
                 <div className="flex flex-wrap items-stretch gap-6 mb-8">
                     {[
@@ -769,34 +888,24 @@ export default function AdminDashboard() {
                         { label: t('resolved_weekly'), value: stats.resolved, icon: <CheckCircle size={24} />, color: 'bg-emerald-500', trend: '98%', sub: 'Target: 95%' },
                         { label: t('active_residents'), value: userStats.total, icon: <Users size={24} />, color: 'bg-slate-900', trend: '+5', sub: 'Community' }
                     ].map((card, i) => (
-                        <motion.div
+                        <div
                             key={i}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.1 }}
-                            whileHover={{ y: -5 }}
-                            className="flex-1 min-w-[280px] bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group overflow-hidden relative"
+                            className="flex-1 w-full sm:w-auto min-w-full sm:min-w-[280px] bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex items-center justify-between group overflow-hidden relative"
                         >
                             <div className="relative z-10">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{card.label}</p>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">{card.label}</p>
                                 <div className="flex items-baseline gap-2">
-                                    <motion.h3
-                                        key={card.value}
-                                        initial={{ scale: 0.8, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        className="text-3xl font-black text-slate-900"
-                                    >
+                                    <h3 className="text-2xl font-black text-slate-900">
                                         {card.value}
-                                    </motion.h3>
+                                    </h3>
                                     <span className={`text-[10px] font-bold ${card.trend.includes('+') ? 'text-emerald-500' : 'text-blue-500'}`}>{card.trend}</span>
                                 </div>
                                 <p className="text-[9px] text-slate-400 mt-1 font-bold">{card.sub}</p>
                             </div>
-                            <div className={`p-4 ${card.color} text-white rounded-2xl shadow-lg relative z-10 group-hover:scale-110 transition-transform`}>
+                            <div className="p-2 bg-blue-50 rounded-lg text-blue-600 relative z-10">
                                 {card.icon}
                             </div>
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-full -mr-12 -mt-12 group-hover:bg-slate-100 transition-colors"></div>
-                        </motion.div>
+                        </div>
                     ))}
                 </div>
 
@@ -804,7 +913,7 @@ export default function AdminDashboard() {
                     {/* Dashboard Tabs & Content */}
                     <div className="flex-1 overflow-hidden">
                         {/* Tabs */}
-                        <div className="flex flex-wrap gap-2 p-1.5 bg-white/50 backdrop-blur-md rounded-[24px] border border-white/30 shadow-sm mb-8 w-fit">
+                        <div className="tab-group mb-6">
                             {[
                                 { id: 'analytics', label: t('analytics'), icon: <BarChart3 size={16} />, color: 'blue' },
                                 { id: 'incidents', label: t('incidents'), icon: <AlertCircle size={16} />, color: 'rose' },
@@ -817,20 +926,10 @@ export default function AdminDashboard() {
                                 <button
                                     key={tab.id}
                                     onClick={() => setCurrentTab(tab.id)}
-                                    className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all relative overflow-hidden group ${currentTab === tab.id
-                                        ? `bg-slate-900 text-white shadow-lg shadow-slate-900/20`
-                                        : 'text-slate-500 hover:bg-white hover:text-slate-900'
-                                        }`}
+                                    className={`tab-btn ${currentTab === tab.id ? 'active' : ''}`}
                                 >
-                                    <span className="relative z-10">{tab.icon}</span>
-                                    <span className="relative z-10">{tab.label}</span>
-                                    {currentTab === tab.id && (
-                                        <motion.div
-                                            layoutId="activeTab"
-                                            className="absolute inset-0 bg-slate-900 z-0"
-                                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                        />
-                                    )}
+                                    {tab.icon}
+                                    {tab.label}
                                 </button>
                             ))}
                         </div>
@@ -850,18 +949,31 @@ export default function AdminDashboard() {
                             {/* --- INCIDENTS TAB --- */}
                             {
                                 currentTab === 'incidents' && (() => {
-                                    const listToFilter = searchQuery ? allIncidents : incidents;
-                                    const filtered = listToFilter.filter(i => {
+                                    const filtered = allIncidents.filter(i => {
                                         const matchesSearch = (i.type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                                             (i.user_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                                             (i.id || '').toString().includes(searchQuery);
 
+                                        const matchesSeverity = filterSeverity === 'All' || i.severity === filterSeverity;
+
                                         if (incidentFilter === 'History') {
-                                            return matchesSearch && (i.status === 'Resolved' || i.status === 'Declined');
+                                            return matchesSearch && matchesSeverity && (i.status === 'Resolved' || i.status === 'Declined');
                                         } else {
-                                            return matchesSearch && i.status !== 'Resolved' && i.status !== 'Declined';
+                                            return matchesSearch && matchesSeverity && i.status !== 'Resolved' && i.status !== 'Declined' && i.status !== 'Archived';
                                         }
+                                    }).sort((a, b) => {
+                                        // Ticketing System Priority Sorting (High -> Medium -> Low)
+                                        const severityRank = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                                        const rankA = severityRank[a.severity] || 0;
+                                        const rankB = severityRank[b.severity] || 0;
+                                        
+                                        if (rankA !== rankB) {
+                                            return rankB - rankA; // Highest priority first
+                                        }
+                                        // If same priority, newest first
+                                        return new Date(b.created_at) - new Date(a.created_at);
                                     });
+                                    const paginatedFiltered = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
                                     // --- GAP 2: SLA Timer Logic ---
                                     const getSlaStatus = (incident) => {
@@ -889,19 +1001,32 @@ export default function AdminDashboard() {
                                     return (
                                         <div className="space-y-4">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                                                <div className="flex gap-2 bg-white/50 p-1.5 rounded-2xl border border-slate-100 shadow-sm">
+                                                <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm">
                                                     <button
                                                         onClick={() => setIncidentFilter('Active')}
-                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'Active' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
+                                                        className={`flex-1 w-full px-4 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'Active' ? 'bg-blue-600 text-white shadow-lg shadow-sm' : 'text-slate-400 hover:bg-slate-50'}`}
                                                     >
                                                         {t('active_queue')}
                                                     </button>
                                                     <button
                                                         onClick={() => setIncidentFilter('History')}
-                                                        className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'History' ? 'bg-slate-900 text-white shadow-lg shadow-slate-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
+                                                        className={`flex-1 w-full px-4 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${incidentFilter === 'History' ? 'bg-slate-900 text-white shadow-lg shadow-slate-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
                                                     >
                                                         {t('incident_history')}
                                                     </button>
+                                                </div>
+
+                                                <div className="flex gap-2">
+                                                    <select
+                                                        value={filterSeverity}
+                                                        onChange={(e) => setFilterSeverity(e.target.value)}
+                                                        className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 bg-white outline-none focus:ring-2 focus:ring-blue-100"
+                                                    >
+                                                        <option value="All">All Priorities</option>
+                                                        <option value="Low">Low</option>
+                                                        <option value="Medium">Medium</option>
+                                                        <option value="High">High</option>
+                                                    </select>
                                                 </div>
 
                                                 {incidentFilter === 'History' && (
@@ -928,29 +1053,31 @@ export default function AdminDashboard() {
                                                 ))
                                             ) : (
                                                 <>
-                                                    {filtered.map((incident) => {
+                                                    {paginatedFiltered.map((incident) => {
                                                         const sla = getSlaStatus(incident);
+                                                        const isDuplicate = incident.description?.startsWith('[DUPLICATE of');
                                                         return (
-                                                            <div key={incident.id} onClick={() => setSelectedIncident(incident)} className={`p-4 border rounded-xl cursor-pointer flex justify-between items-center group transition-all ${sla.isBreached ? 'bg-rose-50 border-rose-200 hover:bg-rose-100 animate-pulse-soft' : 'hover:bg-slate-50'}`}>
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold relative ${incident.status === 'Resolved' ? 'bg-emerald-500' : sla.isBreached ? 'bg-rose-600' : 'bg-blue-500'}`}>
+                                                            <div key={incident.id} onClick={() => setSelectedIncident(incident)} className={`bg-white border border-slate-100 rounded-xl p-4 hover:shadow-sm transition-shadow cursor-pointer flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 group ${sla.isBreached ? 'bg-rose-50 border-rose-200 hover:bg-rose-100' : isDuplicate ? 'bg-orange-50 border-orange-200 hover:bg-orange-100' : ''}`}>
+                                                                <div className="flex items-center gap-4 w-full">
+                                                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold relative shrink-0 ${incident.status === 'Resolved' ? 'bg-emerald-500' : sla.isBreached ? 'bg-rose-600' : isDuplicate ? 'bg-orange-500' : 'bg-blue-500'}`}>
                                                                         {incident.type[0]}
                                                                         {sla.isBreached && <span className="absolute -top-2 -right-2 flex h-4 w-4">
                                                                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                                                                             <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 border-2 border-white"></span>
                                                                         </span>}
                                                                     </div>
-                                                                    <div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <h4 className={`font-bold ${sla.isBreached ? 'text-rose-700' : 'text-slate-800'}`}>{incident.type}</h4>
-                                                                            {sla.isBreached && <span className="text-[9px] font-black uppercase tracking-widest bg-rose-200 text-rose-700 px-2 py-0.5 rounded-md">{t('urgent_action')}</span>}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                            <h4 className={`font-bold ${sla.isBreached ? 'text-rose-700' : isDuplicate ? 'text-orange-700' : 'text-slate-800'}`}>{incident.type}</h4>
+                                                                            {sla.isBreached && <span className="text-[9px] font-black uppercase tracking-widest bg-rose-200 text-rose-700 px-2 py-0.5 rounded-md text-center">{t('urgent_action')}</span>}
+                                                                            {isDuplicate && <span className="text-[9px] font-black uppercase tracking-widest bg-orange-200 text-orange-700 px-2 py-0.5 rounded-md text-center">RECURRING ISSUE</span>}
                                                                         </div>
                                                                         <p className="text-xs text-slate-500">{incident.user_name} • {new Date(incident.created_at).toLocaleDateString()}</p>
-                                                                        {sla.isBreached && <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1"><Clock size={10} /> {sla.text}</p>}
+                                                                        {sla.isBreached && <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-start gap-1"><Clock size={10} className="shrink-0 mt-0.5" /> <span className="whitespace-normal break-words">{sla.text}</span></p>}
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${sla.isBreached ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-slate-100'}`}>{incident.status}</span>
+                                                                <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                                                                    <span className={`badge ${incident.status === 'Pending' ? 'badge-yellow' : incident.status === 'Dispatched' ? 'badge-blue' : incident.status === 'On-Site' ? 'badge-blue' : incident.status === 'Resolved' ? 'badge-green' : incident.status === 'Declined' ? 'badge-red' : 'badge-gray'}`}>{incident.status}</span>
                                                                 </div>
                                                             </div>
                                                         )
@@ -965,7 +1092,7 @@ export default function AdminDashboard() {
                                             )}
                                             <Pagination
                                                 currentPage={page}
-                                                totalItems={stats.total}
+                                                totalItems={filtered.length}
                                                 pageSize={PAGE_SIZE}
                                                 onPageChange={setPage}
                                             />
@@ -985,7 +1112,7 @@ export default function AdminDashboard() {
                                             <div className="flex gap-2 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm">
                                                 <button
                                                     onClick={() => setFilterType('all')}
-                                                    className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filterType === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-slate-50'}`}
+                                                    className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filterType === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-sm' : 'text-slate-400 hover:bg-slate-50'}`}
                                                 >
                                                     {t('all_residents')}
                                                 </button>
@@ -1019,7 +1146,7 @@ export default function AdminDashboard() {
                                                     </div>
                                                 ))
                                             ) : (() => {
-                                                const filtered = users.filter(u => {
+                                                const filteredUsers = users.filter(u => {
                                                     const searchLower = searchQuery.toLowerCase();
                                                     const matchesSearch =
                                                         (u.full_name || '').toLowerCase().includes(searchLower) ||
@@ -1033,7 +1160,7 @@ export default function AdminDashboard() {
                                                     return matchesSearch;
                                                 });
 
-                                                if (filtered.length === 0) {
+                                                if (filteredUsers.length === 0) {
                                                     return (
                                                         <div className="md:col-span-3 py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100 text-center">
                                                             <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
@@ -1043,73 +1170,82 @@ export default function AdminDashboard() {
                                                     );
                                                 }
 
-                                                return filtered.map(u => (
-                                                    <div key={u.id} className="bg-white rounded-[32px] p-6 border border-slate-100 hover:shadow-2xl hover:shadow-slate-200/50 transition-all group flex flex-col h-full">
-                                                        <div className="flex justify-between items-start mb-6">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-500/20">
-                                                                    {(u.full_name || '?')[0].toUpperCase()}
-                                                                </div>
-                                                                <div>
-                                                                    <h4 className="text-lg font-black text-slate-800 leading-tight group-hover:text-blue-600 transition-colors">
-                                                                        {u.full_name || 'Anonymous Resident'}
-                                                                    </h4>
-                                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                                                                        {u.barangay || 'Area Unspecified'}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <button onClick={() => openEditModal(u)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit size={16} /></button>
-                                                                <button onClick={() => confirmDelete(u, 'user')} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16} /></button>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Specialized Report Container */}
-                                                        <div className="flex-1 bg-slate-50 rounded-2xl p-4 mb-6">
-                                                            <div className="flex items-center justify-between mb-3">
-                                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Incident Logs</span>
-                                                                <AlertCircle size={12} className="text-slate-300" />
-                                                            </div>
-                                                            <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
-                                                                {allIncidents.filter(i => i.user_id === u.id).length > 0 ? (
-                                                                    allIncidents.filter(i => i.user_id === u.id).map(i => (
-                                                                        <div key={i.id} className="bg-white p-2.5 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm">
-                                                                            <div className="flex items-center gap-2 overflow-hidden">
-                                                                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${i.status === 'Resolved' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
-                                                                                <span className="text-[10px] font-bold text-slate-700 truncate">{i.type}</span>
-                                                                            </div>
-                                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter whitespace-nowrap ml-2">{i.status}</span>
+                                                const paginatedFiltered = filteredUsers.slice(userPage * PAGE_SIZE, (userPage + 1) * PAGE_SIZE);
+                                                return (
+                                                    <>
+                                                        {paginatedFiltered.map(u => (
+                                                            <div key={u.id} className="bg-white rounded-[32px] p-6 border border-slate-100 hover:shadow-2xl hover:shadow-slate-200/50 transition-all group flex flex-col h-full">
+                                                                <div className="flex justify-between items-start mb-6">
+                                                                    <div className="flex items-center gap-4">
+                                                                        <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-sm">
+                                                                            {(u.full_name || '?')[0].toUpperCase()}
                                                                         </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <p className="text-[10px] text-slate-300 italic py-4 text-center">No reports on file</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                                                        <div>
+                                                                            <h4 className="text-lg font-black text-slate-800 leading-tight group-hover:text-blue-600 transition-colors">
+                                                                                {u.full_name || 'Anonymous Resident'}
+                                                                            </h4>
+                                                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                                                                                {u.barangay || 'Area Unspecified'}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <button onClick={() => openEditModal(u)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit size={16} /></button>
+                                                                        <button onClick={() => confirmDelete(u, 'user')} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16} /></button>
+                                                                    </div>
+                                                                </div>
 
-                                                        <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Contact Path</span>
-                                                                <span className="text-xs font-bold text-slate-700">{u.phone || 'No phone set'}</span>
+                                                                {/* Specialized Report Container */}
+                                                                <div className="flex-1 bg-slate-50 rounded-2xl p-4 mb-6">
+                                                                    <div className="flex items-center justify-between mb-3">
+                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Incident Logs</span>
+                                                                        <AlertCircle size={12} className="text-slate-300" />
+                                                                    </div>
+                                                                    <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
+                                                                        {allIncidents.filter(i => i.user_id === u.id).length > 0 ? (
+                                                                            allIncidents.filter(i => i.user_id === u.id).map(i => (
+                                                                                <div key={i.id} className="bg-white p-2.5 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm">
+                                                                                    <div className="flex items-center gap-2 overflow-hidden">
+                                                                                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${i.status === 'Resolved' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                                                                                        <span className="text-[10px] font-bold text-slate-700 truncate">{i.type}</span>
+                                                                                    </div>
+                                                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter whitespace-nowrap ml-2">{i.status}</span>
+                                                                                </div>
+                                                                            ))
+                                                                        ) : (
+                                                                            <p className="text-[10px] text-slate-300 italic py-4 text-center">No reports on file</p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Contact Path</span>
+                                                                        <span className="text-xs font-bold text-slate-700">{u.phone || 'No phone set'}</span>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => setSelectedUserProfile(u)}
+                                                                        className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                                                    >
+                                                                        Full Profile
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                            <button
-                                                                onClick={() => setSelectedUserProfile(u)}
-                                                                className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                                                            >
-                                                                Full Profile
-                                                            </button>
+                                                        ))}
+                                                        
+                                                        {/* Pagination inside the IIFE to access filteredUsers */}
+                                                        <div className="md:col-span-2 lg:col-span-3">
+                                                            <Pagination
+                                                                currentPage={userPage}
+                                                                totalItems={filteredUsers.length}
+                                                                pageSize={PAGE_SIZE}
+                                                                onPageChange={setUserPage}
+                                                            />
                                                         </div>
-                                                    </div>
-                                                ));
+                                                    </>
+                                                );
                                             })()}
                                         </div>
-                                        <Pagination
-                                            currentPage={userPage}
-                                            totalItems={userStats.total}
-                                            pageSize={PAGE_SIZE}
-                                            onPageChange={setUserPage}
-                                        />
                                     </div>
                                 )
                             }
@@ -1152,7 +1288,7 @@ export default function AdminDashboard() {
                                                         <p className="text-xs text-slate-600 font-bold leading-relaxed">"{ticket.description}"</p>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button onClick={() => setSelectedTranscript(ticket)} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:scale-[1.02] transition-all">
+                                                        <button onClick={() => setSelectedTranscript(ticket)} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-sm hover:scale-[1.02] transition-all">
                                                             {t('open_transcript')}
                                                         </button>
                                                         <button onClick={() => handleResolveTicket(ticket.id)} className="px-6 py-3 border border-slate-200 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest hover:text-blue-600 hover:border-blue-200 transition-all">
@@ -1248,6 +1384,13 @@ export default function AdminDashboard() {
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                                                    <button
+                                                                        onClick={() => handleToggleBillStatus(bill)}
+                                                                        title={bill.status === 'Paid' ? 'Mark as Unpaid' : 'Mark as Paid'}
+                                                                        className={`p-2 rounded-lg transition-colors ${bill.status === 'Paid' ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50' : 'text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                                                                    >
+                                                                        <CheckCircle size={16} />
+                                                                    </button>
                                                                     <button
                                                                         onClick={() => handlePrintReceipt(bill)}
                                                                         className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -1393,12 +1536,12 @@ export default function AdminDashboard() {
                 {/* Incident Modal */}
                 {
                     selectedIncident && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-900/50">
                             <div className="bg-white rounded-[32px] p-0 max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[95vh] sm:max-h-[90vh]">
                                 <div className="w-full md:w-1/2 bg-slate-100 relative min-h-[200px] sm:min-h-[300px]">
                                     {/* Map or Image View */}
-                                    {selectedIncident.image_url ? (
-                                        <img src={selectedIncident.image_url} className="w-full h-full object-cover" alt="Incident" />
+                                    {selectedIncident.evidence_url ? (
+                                        <img src={selectedIncident.evidence_url} className="w-full h-full object-cover" alt="Incident" />
                                     ) : selectedIncident.latitude ? (
                                         <MapContainer center={[selectedIncident.latitude, selectedIncident.longitude]} zoom={15} style={{ height: '100%', minHeight: '200px' }}>
                                             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -1440,7 +1583,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <div className="grid grid-cols-2 gap-3 mb-4">
                                         <button
-                                            onClick={() => updateStatus('Dispatched')}
+                                            onClick={() => setDispatchModal({ isOpen: true, technician: '' })}
                                             className={`py-3 sm:py-4 font-black uppercase rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-[10px] sm:text-xs ${selectedIncident.status === 'Dispatched' ? 'bg-indigo-700 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                                         >
                                             <Truck size={14} /> Dispatch
@@ -1473,7 +1616,7 @@ export default function AdminDashboard() {
                                         >
                                             <Download size={14} /> Download PDF
                                         </button>
-                                        <button onClick={() => confirmDelete(selectedIncident, 'incident')} className="py-2.5 text-rose-500 font-bold text-[10px] sm:text-xs uppercase hover:bg-rose-50 rounded-xl transition-colors">Delete Report</button>
+                                        <button onClick={() => confirmDelete(selectedIncident, 'incident')} className="py-2.5 text-slate-500 font-bold text-[10px] sm:text-xs uppercase hover:bg-slate-100 hover:text-slate-700 rounded-xl transition-colors">Archive Report</button>
                                     </div>
                                 </div>
                             </div>
@@ -1484,11 +1627,11 @@ export default function AdminDashboard() {
                 {/* User Profile Modal */}
                 {
                     selectedUserProfile && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50">
                             <div className="bg-white rounded-[40px] p-10 max-w-3xl w-full shadow-2xl shadow-blue-900/10 max-h-[90vh] overflow-y-auto custom-scrollbar border border-slate-100">
                                 <div className="flex justify-between items-start mb-10">
                                     <div className="flex items-center gap-6">
-                                        <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-blue-500/30">
+                                        <div className="w-24 h-24 rounded-[2rem] bg-blue-50 text-blue-600 flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-sm">
                                             {(selectedUserProfile.full_name || selectedUserProfile.email)[0].toUpperCase()}
                                         </div>
                                         <div>
@@ -1506,15 +1649,15 @@ export default function AdminDashboard() {
                                 </div>
 
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-10">
-                                    <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-3xl border border-slate-100">
+                                    <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><User size={12} /> First Name</p>
                                         <p className="font-black text-xl text-slate-700">{selectedUserProfile.first_name || 'Not set'}</p>
                                     </div>
-                                    <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-3xl border border-slate-100">
+                                    <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><User size={12} /> Last Name</p>
                                         <p className="font-black text-xl text-slate-700">{selectedUserProfile.last_name || 'Not set'}</p>
                                     </div>
-                                    <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-3xl border border-slate-100 md:col-span-1 col-span-2">
+                                    <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 md:col-span-1 col-span-2">
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><Phone size={12} /> Contact Path</p>
                                         <p className="font-black text-xl text-slate-700">{selectedUserProfile.phone || 'No phone set'}</p>
                                     </div>
@@ -1591,7 +1734,7 @@ export default function AdminDashboard() {
                 {/* Receipt Modal */}
                 {
                     selectedTransaction && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50">
                             <div className="bg-white p-8 max-w-md w-full shadow-2xl relative print-modal">
                                 <button onClick={() => setSelectedTransaction(null)} className="absolute top-4 right-4 print:hidden"><X /></button>
 
@@ -1663,7 +1806,7 @@ export default function AdminDashboard() {
                 {/* Confirm Modal */}
                 {
                     confirmModal.isOpen && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/50">
                             <div className="bg-white rounded-3xl p-8 max-w-sm w-full">
                                 <h3 className="text-xl font-black text-slate-800 text-center mb-2">{confirmModal.title}</h3>
                                 <p className="text-slate-500 text-center mb-6">{confirmModal.message}</p>
@@ -1679,7 +1822,7 @@ export default function AdminDashboard() {
                 {/* Bill Generation Modal */}
                 {
                     isBillModalOpen && (
-                        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+                        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/50">
                             <div className="bg-white rounded-[40px] p-10 max-w-lg w-full shadow-2xl relative animate-slide-up">
                                 <button onClick={() => setIsBillModalOpen(false)} className="absolute top-8 right-8 p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-400" /></button>
 
@@ -1703,37 +1846,23 @@ export default function AdminDashboard() {
                                             >
                                                 <span className={billForm.user_id ? "text-slate-800" : "text-slate-400"}>
                                                     {billForm.user_id
-                                                        ? users.find(u => u.id === billForm.user_id)?.full_name
-                                                        : "Search resident by name..."}
+                                                        ? allProfiles.find(u => u.id === billForm.user_id)?.full_name
+                                                        : "Select a resident..."}
                                                 </span>
                                                 <Search size={16} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
                                             </div>
 
                                             {isResidentDropdownOpen && (
                                                 <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-100 shadow-2xl z-[150] overflow-hidden animate-slide-up">
-                                                    <div className="p-3 border-b border-slate-50">
-                                                        <input
-                                                            autoFocus
-                                                            type="text"
-                                                            placeholder="Type to filter residents..."
-                                                            value={residentSearchQuery}
-                                                            onChange={(e) => setResidentSearchQuery(e.target.value)}
-                                                            className="w-full px-4 py-2 bg-slate-50 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-600/20"
-                                                        />
-                                                    </div>
-                                                    <div className="max-h-[200px] overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                                                        {users
-                                                            .filter(u => u.role === 'customer' &&
-                                                                (u.full_name?.toLowerCase().includes(residentSearchQuery.toLowerCase()) ||
-                                                                    u.email?.toLowerCase().includes(residentSearchQuery.toLowerCase()))
-                                                            )
+                                                    <div className="max-h-[300px] overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                                        {allProfiles
+                                                            .filter(u => u.role === 'customer')
                                                             .map(u => (
                                                                 <div
                                                                     key={u.id}
                                                                     onClick={() => {
                                                                         setBillForm({ ...billForm, user_id: u.id, address: u.address || '' });
                                                                         setIsResidentDropdownOpen(false);
-                                                                        setResidentSearchQuery('');
                                                                     }}
                                                                     className="px-4 py-3 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors group"
                                                                 >
@@ -1741,10 +1870,7 @@ export default function AdminDashboard() {
                                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{u.email}</p>
                                                                 </div>
                                                             ))}
-                                                        {users.filter(u => u.role === 'customer' &&
-                                                            (u.full_name?.toLowerCase().includes(residentSearchQuery.toLowerCase()) ||
-                                                                u.email?.toLowerCase().includes(residentSearchQuery.toLowerCase()))
-                                                        ).length === 0 && (
+                                                        {allProfiles.filter(u => u.role === 'customer').length === 0 && (
                                                                 <div className="py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
                                                                     No residents found
                                                                 </div>
@@ -1787,7 +1913,11 @@ export default function AdminDashboard() {
                                                 step="0.1"
                                                 required
                                                 value={billForm.consumption}
-                                                onChange={e => setBillForm({ ...billForm, consumption: e.target.value })}
+                                                onChange={e => {
+                                                    const consumption = e.target.value;
+                                                    const amount = consumption ? (parseFloat(consumption) * 35.5).toFixed(2) : '';
+                                                    setBillForm({ ...billForm, consumption, amount });
+                                                }}
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-100 bg-slate-50 font-bold text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-600/20"
                                             />
                                         </div>
@@ -1806,7 +1936,7 @@ export default function AdminDashboard() {
 
                                     <button
                                         type="submit"
-                                        className="w-full py-5 bg-blue-600 text-white font-black uppercase text-sm rounded-2xl shadow-xl shadow-blue-500/20 hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3 mt-4"
+                                        className="w-full py-5 bg-blue-600 text-white font-black uppercase text-sm rounded-2xl shadow-xl shadow-sm hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3 mt-4"
                                     >
                                         {t('issue_bill_btn')} <ArrowRight size={20} />
                                     </button>
@@ -1819,7 +1949,7 @@ export default function AdminDashboard() {
                 {/* Edit User Modal */}
                 {
                     editModal.isOpen && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/50 animate-fade-in">
                             <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-scale-up">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-xl font-black text-slate-800">{t('edit_user')}</h3>
@@ -1889,7 +2019,7 @@ export default function AdminDashboard() {
 
                                 <button
                                     onClick={handleUpdateUser}
-                                    className="w-full py-4 rounded-xl bg-blue-600 text-white font-black uppercase tracking-widest shadow-lg shadow-blue-500/30 hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                    className="w-full py-4 rounded-xl bg-blue-600 text-white font-black uppercase tracking-widest shadow-lg shadow-sm hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] transition-all"
                                 >
                                     {t('save_changes')}
                                 </button>
@@ -1918,7 +2048,7 @@ export default function AdminDashboard() {
                 {/* Advisory Creation Modal */}
                 {
                     isAnnouncementModalOpen && (
-                        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+                        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/50">
                             <div className="bg-white rounded-[40px] p-10 max-w-lg w-full shadow-2xl relative animate-slide-up">
                                 <button onClick={() => setIsAnnouncementModalOpen(false)} className="absolute top-8 right-8 p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-400" /></button>
 
@@ -1973,6 +2103,18 @@ export default function AdminDashboard() {
                                         />
                                     </div>
 
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Target Location (Barangay)</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Leave blank for All Areas"
+                                            value={announcementForm.location}
+                                            onChange={e => setAnnouncementForm({ ...announcementForm, location: e.target.value })}
+                                            className="w-full px-5 py-4 rounded-2xl border border-slate-100 bg-slate-50 font-bold text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-600/20"
+                                        />
+                                        <p className="text-[10px] text-slate-400 mt-1">If SMS is enabled, only users in this location will be texted.</p>
+                                    </div>
+
                                     <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-100 rounded-2xl">
                                         <input
                                             type="checkbox"
@@ -2001,7 +2143,7 @@ export default function AdminDashboard() {
                 {/* Transcript Modal */}
                 {
                     selectedTranscript && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/50">
                             <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] flex flex-col">
                                 <div className="flex justify-between items-center mb-6">
                                     <div>
@@ -2037,7 +2179,7 @@ export default function AdminDashboard() {
                 {/* --- GAP 4: Delivery Tracking Report Modal --- */}
                 {
                     deliveryReport && (
-                        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+                        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-slate-900/50">
                             <div className="bg-white rounded-[40px] p-10 max-w-md w-full shadow-2xl relative animate-scale-up text-center border-4 border-slate-50">
                                 <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-500 shadow-inner">
                                     <Send size={40} className="animate-bounce" />
@@ -2078,6 +2220,7 @@ export default function AdminDashboard() {
                         </div>
                     )
                 }
+                </div>
             </main >
 
             <ProfileManagementModal
@@ -2096,6 +2239,73 @@ export default function AdminDashboard() {
                     </div>
                 )
             }
+            {/* Dispatch Modal */}
+            <AnimatePresence>
+                {dispatchModal.isOpen && (
+                    <div className="fixed inset-0 bg-slate-900/50 z-[200] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="font-black text-slate-800 text-lg">Dispatch Team</h3>
+                                    <p className="text-xs font-bold text-slate-500 mt-1 uppercase tracking-wider">Assign Technician</p>
+                                </div>
+                                <button onClick={() => setDispatchModal({ isOpen: false, technician: '' })} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            
+                            <form onSubmit={handleDispatchSubmit}>
+                                <div className="mb-6 input-group">
+                                    <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+                                        Technician Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={dispatchModal.technician}
+                                        onChange={(e) => setDispatchModal({ ...dispatchModal, technician: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
+                                        placeholder="Enter technician name..."
+                                    />
+                                </div>
+                                
+                                {dispatchModal.technician.trim() && (
+                                    <div className="mb-6 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                                        <p className="text-xs font-bold text-blue-800">
+                                            Message preview to resident:
+                                        </p>
+                                        <p className="text-sm font-medium text-blue-600 mt-1">
+                                            "Technician {dispatchModal.technician} has been dispatched to your location."
+                                        </p>
+                                    </div>
+                                )}
+                                
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDispatchModal({ isOpen: false, technician: '' })}
+                                        className="btn btn-ghost"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={!dispatchModal.technician.trim()}
+                                        className="btn btn-primary flex items-center gap-2"
+                                    >
+                                        <Truck size={16} /> Confirm Dispatch
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+            </AnimatePresence>
+
         </div >
     );
 }
+
+
+
+

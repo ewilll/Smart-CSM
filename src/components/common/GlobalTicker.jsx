@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import { AlertTriangle, Info, Zap, X } from 'lucide-react';
+import { getCurrentUser } from '../../utils/auth';
 
 export default function GlobalTicker() {
     const [activeAnnouncements, setActiveAnnouncements] = useState([]);
     const [isVisible, setIsVisible] = useState(true);
+    const user = getCurrentUser();
+
+    // Hide ticker for admins
+    if (user && user.role === 'admin') {
+        return null;
+    }
 
     useEffect(() => {
         fetchActiveAnnouncements();
@@ -48,7 +55,7 @@ export default function GlobalTicker() {
     if (!isVisible || activeAnnouncements.length === 0) return null;
 
     return (
-        <div className="bg-rose-600 text-white z-[999] relative flex overflow-hidden group/ticker">
+        <div className="bg-rose-600 text-white z-[9999] fixed top-0 left-0 right-0 flex overflow-hidden group/ticker h-8 shadow-md">
             <div className="absolute left-0 top-0 bottom-0 bg-rose-700 font-black text-[10px] uppercase tracking-widest px-4 flex items-center justify-center z-10 shadow-[4px_0_10px_rgba(0,0,0,0.2)]">
                 <span className="flex items-center gap-2"><Zap size={14} className="animate-pulse text-amber-300" /> SYSTEM ADVISORY</span>
             </div>

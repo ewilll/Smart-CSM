@@ -1,9 +1,23 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/Navbar';
 import { Activity, Zap, Cpu, BarChart3, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function RealTimeTracking() {
+    const [currentFlow, setCurrentFlow] = useState(12.5);
+    const [totalToday, setTotalToday] = useState(420);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentFlow(prev => {
+                const fluctuation = (Math.random() - 0.5) * 2;
+                return Math.max(0, Math.round((prev + fluctuation) * 10) / 10);
+            });
+            setTotalToday(prev => prev + Math.round(Math.random() * 2));
+        }, 3000);
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <div className="min-h-screen relative flex flex-col overflow-x-hidden water-bg">
             <Navbar />
@@ -63,11 +77,11 @@ export default function RealTimeTracking() {
                                 <div className="mt-8 grid grid-cols-2 gap-4">
                                     <div className="bg-white/80 p-4 rounded-2xl shadow-sm">
                                         <p className="text-xs font-bold text-slate-400 uppercase">Current Flow</p>
-                                        <p className="text-2xl font-black text-slate-800">12.5 L/m</p>
+                                        <p className="text-2xl font-black text-slate-800">{currentFlow} L/m</p>
                                     </div>
                                     <div className="bg-white/80 p-4 rounded-2xl shadow-sm">
                                         <p className="text-xs font-bold text-slate-400 uppercase">Total Today</p>
-                                        <p className="text-2xl font-black text-slate-800">420 L</p>
+                                        <p className="text-2xl font-black text-slate-800">{totalToday} L</p>
                                     </div>
                                 </div>
                             </div>

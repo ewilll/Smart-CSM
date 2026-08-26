@@ -1,28 +1,95 @@
-// AI Service for PrimeWater Smart CSM
-// Handles local AI server communication and offline fallback
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { supabase } from './supabaseClient';
+import { getCurrentUser } from './auth';
 
 const AI_SERVER_URL = "http://localhost:8000";
 const AI_SECRET_KEY = "csm_secure_ai_access_2024";
 
+// Initialize Gemini API
+const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+
 /**
- * Sends a message to the local AI Chatbot (Aqua)
+ * Sends a message to the Gemini API with live system context
  */
 export const getAIChatResponse = async (history, currentMessage, isAuthenticated) => {
     try {
-        const response = await fetch(`${AI_SERVER_URL}/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSM-Secret': AI_SECRET_KEY
-            },
-            body: JSON.stringify({ message: currentMessage })
+        if (!import.meta.env.VITE_GEMINI_API_KEY) {
+            throw new Error('Gemini API Key missing');
+        }
+        const user = getCurrentUser();
+
+        // 1. Gather Live Context Data from Supabase
+        let contextData = "";
+        if (user) {
+            const { data: bills } = await supabase.from('bills').select('*').eq('user_id', user.id).eq('status', 'Unpaid');
+            const { data: userIncidents } = await supabase.from('incidents').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3);
+            const { data: globalIncidents } = await supabase.from('incidents').select('*').in('status', ['Pending', 'Dispatched', 'On-Site']).limit(3);
+            
+            contextData = `
+            CURRENT LIVE SYSTEM CONTEXT:
+            User ID: ${user.id}
+            User Name: ${user.full_name || 'Resident'}
+            Unpaid Bills: ${bills && bills.length > 0 ? bills.map(b => `${b.amount_due} PHP (Due: ${b.due_date})`).join(', ') : 'None'}
+            The User's Specifically Reported Incidents: ${userIncidents && userIncidents.length > 0 ? userIncidents.map(i => `[Type: ${i.type}, Location: ${i.location}, Status: ${i.status}]`).join(' | ') : 'User has not reported any incidents.'}
+            Global Active Maintenance/Issues: ${globalIncidents && globalIncidents.length > 0 ? globalIncidents.map(i => `[${i.type} at ${i.location}]`).join(', ') : 'None'}
+            `;
+        } else {
+            contextData = "User is not logged in. Advise them to log in to see their specific billing and report details.";
+        }
+
+        // 2. Build the prompt with System Instructions
+        const systemInstruction = `
+            You are Aqua, the friendly and highly intelligent official AI assistant for PrimeWater Smart CSM (Centralized System Management) in Malaybalay City.
+            Your job is to assist users with water-related concerns, billing inquiries, and system guidance.
+            You must be polite, concise, and helpful. Do not mention that you are an AI model like Gemini. You are Aqua.
+
+            CRITICAL RESTRICTION: You MUST ONLY answer questions related to PrimeWater, water supply, billing, plumbing, or the Smart CSM system. 
+            If the user asks ANY question unrelated to these topics (e.g., general knowledge, coding, math, entertainment, definitions of random words), you MUST politely refuse to answer and remind them that you are exclusively a PrimeWater support assistant.
+
+            Here is the live data from the PrimeWater system right now. Use this to answer the user's questions specifically and dynamically!
+            ${contextData}
+
+            If the user asks about their own reported incident, check "The User's Specifically Reported Incidents" data above. Tell them the status of their specific report.
+            If the user reports a new leak or lack of water, check the "Global Active Maintenance" data to see if there is already a known issue in their area.
+            If there isn't a known issue, guide them to go to the "Report Incident" page to submit an official report.
+            Keep your answers short, friendly, and professional. 
+            IMPORTANT: Do NOT use any emojis. Do NOT use any Markdown formatting like **bold**, *italics*, or lists. Use completely plain text only.
+        `;
+
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-3.6-flash",
+            systemInstruction: systemInstruction
         });
 
-        if (!response.ok) throw new Error('AI Server Offline');
-        const data = await response.json();
-        return data.response;
+        // 3. Format history for Gemini API (must start with 'user' and alternate)
+        let formattedHistory = [];
+        let expectedRole = 'user';
+
+        for (const msg of history) {
+            const role = msg.role === 'user' ? 'user' : 'model';
+            if (role === expectedRole) {
+                formattedHistory.push({
+                    role: role,
+                    parts: [{ text: msg.content }]
+                });
+                expectedRole = expectedRole === 'user' ? 'model' : 'user';
+            }
+        }
+
+        const chat = model.startChat({
+            history: formattedHistory
+        });
+
+        const result = await chat.sendMessage(currentMessage);
+        return result.response.text();
     } catch (error) {
-        console.error("AI Error:", error);
+        console.error("Gemini AI Error:", error);
+        
+        // Handle 503 Overloaded specifically
+        if (error.message && error.message.includes('503')) {
+            return "💧 Aqua is currently experiencing very high demand helping other residents! Please wait a moment and try asking your question again.";
+        }
+        
         return getOfflineResponse(currentMessage);
     }
 };
@@ -143,58 +210,6 @@ export const analyzeIncidentImage = async (imageFile) => {
     }
 };
 
-/**
- * Fetches queries that the AI didn't recognize with high confidence
- */
-export const getUnclassifiedQueries = async () => {
-    try {
-        const response = await fetch(`${AI_SERVER_URL}/unclassified`, {
-            headers: { 'X-CSM-Secret': AI_SECRET_KEY }
-        });
-        if (!response.ok) throw new Error('AI Server Offline');
-        const data = await response.json();
-        return data.queries;
-    } catch (error) {
-        // Silently return empty — AI server may just be offline
-        return [];
-    }
-};
-
-/**
- * Teaches Aqua a new phrase by assigning it an intent
- */
-export const adaptQuery = async (text, intent) => {
-    try {
-        const response = await fetch(`${AI_SERVER_URL}/adapt`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSM-Secret': AI_SECRET_KEY
-            },
-            body: JSON.stringify({ text, intent })
-        });
-        if (!response.ok) throw new Error('AI Server Offline');
-        return await response.json();
-    } catch (error) {
-        return { status: 'error', message: 'AI Server Offline (Port 8000)', isOffline: true };
-    }
-};
-
-/**
- * Triggers the Mahoraga Adaptation (Retraining the brain)
- */
-export const retrainModel = async () => {
-    try {
-        const response = await fetch(`${AI_SERVER_URL}/retrain`, {
-            method: 'POST',
-            headers: { 'X-CSM-Secret': AI_SECRET_KEY }
-        });
-        if (!response.ok) throw new Error('AI Server Offline');
-        return await response.json();
-    } catch (error) {
-        return { status: 'error', message: 'AI Server Offline (Port 8000)', isOffline: true };
-    }
-};
 
 /**
  * Fetches the master system DNA (Barangays, responses, hotlines)
@@ -210,7 +225,6 @@ export const getSystemConfig = async () => {
         console.error("Fetch Config Error:", error);
         return {
             MALAYBALAY_BARANGAYS: [],
-            RESPONSES: {},
             HOTLINES: [],
             isOffline: true
         };

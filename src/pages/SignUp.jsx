@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Droplets, User, Mail, Lock, ArrowRight, CheckCircle, AlertCircle, Eye, EyeOff, Phone, MapPin, ArrowLeft } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 import AnimatedBackground from '../components/AnimatedBackground';
-import { registerUser, signInWithGoogle, loginUser } from '../utils/auth';
+import { registerUser, signInWithGoogle, loginUser, getCurrentUser } from '../utils/auth';
 import ReCAPTCHA from "react-google-recaptcha";
 import LocationPickerModal from '../components/LocationPickerModal';
 
@@ -25,13 +26,18 @@ export default function SignUp() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Check for "not registered" error from login redirect
+    // Prevent double login & check for "not registered" error
     React.useEffect(() => {
+        const user = getCurrentUser();
+        if (user) {
+            navigate(user.role === 'admin' ? '/admin' : '/dashboard', { replace: true });
+        }
+
         const params = new URLSearchParams(location.search);
         if (params.get('error') === 'not_registered') {
             setError('Account not found. Please create an account first to continue with Google.');
         }
-    }, [location]);
+    }, [location, navigate]);
 
     // Development Bypass for local IP and Localtunnel testing
     const isLocalIP = window.location.hostname === 'localhost' ||
@@ -74,8 +80,23 @@ export default function SignUp() {
         setSuccess(false);
 
         // Validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            setError('Please enter a valid email address');
+            toast.error('Please enter a valid email address');
+            return;
+        }
+
+        const phoneRegex = /^(09|\+639)\d{9}$/;
+        if (!phoneRegex.test(phone)) {
+            setError('Please enter a valid Philippine mobile number (e.g. 09123456789)');
+            toast.error('Please enter a valid Philippine mobile number');
+            return;
+        }
+
         if (password.length < 6) {
             setError('Password must be at least 6 characters long');
+            toast.error('Password must be at least 6 characters long');
             return;
         }
 
@@ -106,238 +127,269 @@ export default function SignUp() {
                 setSuccess(true);
             } else {
                 if (result.message && (result.message.toLowerCase().includes('already registered') || result.message.includes('422'))) {
-                    console.log("User exists, attempting auto-login...");
-                    localStorage.setItem('smart_csm_auth_intent', 'login');
-                    const loginResult = await loginUser(email, password);
-
-                    if (loginResult.success) {
-                        setSuccess(true);
-                        return;
-                    }
+                    setError('This email is already registered. Please go to the Login page.');
+                    toast.error('This email is already registered. Please login.');
+                } else {
+                    setError(result.message);
+                    toast.error(result.message);
                 }
                 localStorage.removeItem('smart_csm_auth_intent');
-                setError(result.message);
             }
         } catch (err) {
             localStorage.removeItem('smart_csm_auth_intent');
             setError(err.message || 'An unexpected error occurred. Please try again.');
+            toast.error(err.message || 'An unexpected error occurred. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen relative flex flex-col overflow-hidden">
-            {/* Premium Animated Background Layer */}
-            <AnimatedBackground />
-
-            {/* Back Button */}
-            <Link
-                to="/"
-                className="absolute top-6 left-6 z-50 flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-white/40 rounded-full shadow-lg text-slate-700 font-bold text-sm hover:bg-white hover:scale-105 hover:text-blue-600 transition-all duration-300"
-            >
-                <ArrowLeft size={16} /> Back to Home
-            </Link>
-
-            {/* Content Container */}
-            <div className="w-full min-h-screen flex flex-col items-center justify-center py-12 px-4 relative z-10">
-
-                {/* Branding - Clean & Floating */}
-                <div className="flex flex-col items-center justify-center mb-10 w-full text-center animate-slide-up">
-                    <Link to="/" className="group flex flex-col items-center">
-                        <div className="h-14 w-14 mb-4 bg-blue-600 rounded-[22px] flex items-center justify-center shadow-xl shadow-blue-500/20 group-hover:rotate-6 transition-all">
-                            <Droplets className="h-7 w-7 text-white" strokeWidth={2.5} />
+        <div className="h-screen flex bg-slate-50 overflow-hidden">
+            {/* Left branding panel */}
+            <div className="hidden lg:flex flex-col justify-between bg-blue-600 text-white w-[420px] xl:w-[480px] p-10 flex-shrink-0">
+                <div>
+                    <Link to="/" className="inline-flex items-center gap-3 group mb-12">
+                        <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                            <Droplets className="h-6 w-6 text-blue-600" strokeWidth={2.5} />
                         </div>
-                        <span className="brand-title !text-4xl tracking-tighter">
-                            <span className="text-slate-900">Prime</span>
-                            <span className="text-blue-600">Water</span>
+                        <span className="text-3xl font-black tracking-tight">
+                            <span className="text-white">Prime</span>
+                            <span className="text-blue-200">Water</span>
                         </span>
                     </Link>
-                    <p className="mt-3 text-slate-500 text-xs font-black uppercase tracking-[0.3em]">Smart Infrastructure Hub</p>
+                    
+                    <h1 className="text-4xl font-bold leading-tight mb-6">
+                        Join PrimeWater Smart CSM Today
+                    </h1>
+                    <p className="text-blue-100 text-lg leading-relaxed mb-8">
+                        Experience a new standard in water utility management. Track usage, pay bills, and report incidents all in one place.
+                    </p>
+                    
+                    <ul className="space-y-4">
+                        <li className="flex items-center gap-3 text-blue-100 font-medium">
+                            <CheckCircle className="h-5 w-5 text-blue-300" /> Easy 2-minute registration
+                        </li>
+                        <li className="flex items-center gap-3 text-blue-100 font-medium">
+                            <CheckCircle className="h-5 w-5 text-blue-300" /> Secure personal data
+                        </li>
+                        <li className="flex items-center gap-3 text-blue-100 font-medium">
+                            <CheckCircle className="h-5 w-5 text-blue-300" /> Instant access to services
+                        </li>
+                    </ul>
                 </div>
+                
+                <div className="text-sm font-medium text-blue-300">
+                    &copy; {new Date().getFullYear()} PrimeWater. All rights reserved.
+                </div>
+            </div>
 
-                {/* Glassmorphism Card */}
-                <div className="glass-card p-10 relative overflow-hidden animate-slide-up delay-100" style={{ maxWidth: '440px', width: '100%' }}>
-                    {/* Subtle Glow inside card */}
-                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl"></div>
-                    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl"></div>
+            {/* Right form panel */}
+            <div className="flex-1 flex flex-col relative h-full overflow-y-auto">
+                {/* Back Button for mobile */}
+                <Link
+                    to="/"
+                    className="absolute top-6 left-6 lg:hidden flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-full shadow-sm text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors z-10"
+                >
+                    <ArrowLeft size={16} /> Back
+                </Link>
 
-                    <div className="mb-6 text-center">
-                        <h2 className="text-xl font-black text-slate-800 tracking-tight mb-1">Join PrimeWater</h2>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Create your resident account</p>
-                    </div>
-
-                    <form className="space-y-3" onSubmit={handleSubmit}>
-                        <div className="input-group">
-                            <input
-                                type="text"
-                                required
-                                placeholder="Full Name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                            />
-                            <User className="input-icon h-5 w-5" />
+                <div className="flex-1 flex items-center justify-center p-8 py-12">
+                    <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm w-full max-w-md">
+                        <div className="mb-8 text-center">
+                            <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">Create Account</h2>
+                            <p className="text-sm text-slate-500">Sign up to get started</p>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="input-group">
+                        <form className="space-y-4" onSubmit={handleSubmit}>
+                            <div className="input-group relative">
                                 <input
                                     type="text"
                                     required
-                                    placeholder="Phone Number"
+                                    placeholder="Full Name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="w-full h-12 px-4 pl-12 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all text-slate-700 bg-white"
+                                />
+                                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="input-group relative">
+                                    <input
+                                        type="tel"
+                                        required
+                                        placeholder="Phone Number (e.g. 09123456789)"
+                                        pattern="^(09|\+639)\d{9}$"
+                                        title="Please enter a valid Philippine mobile number starting with 09 or +639 followed by 9 digits."
+                                        value={phone}
+                                        onChange={(e) => setPhone(e.target.value)}
+                                        className="w-full h-12 px-4 pl-[42px] rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all text-slate-700 bg-white text-sm"
+                                    />
+                                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                </div>
+                                <div className="input-group relative">
+                                    <select
+                                        required
+                                        value={barangay}
+                                        onChange={(e) => setBarangay(e.target.value)}
+                                        className="w-full h-12 px-4 pl-[42px] pr-12 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all text-slate-700 bg-white text-sm appearance-none cursor-pointer"
+                                    >
+                                        <option value="" disabled>Select Service Coverage (Barangay)</option>
+                                        <option value="Aglayan">Aglayan</option>
+                                        <option value="Bangcud">Bangcud</option>
+                                        <option value="Casisang">Casisang</option>
+                                        <option value="Dalwangan">Dalwangan</option>
+                                        <option value="Imbayao">Imbayao</option>
+                                        <option value="Kalasungay">Kalasungay</option>
+                                        <option value="Laguitas">Laguitas</option>
+                                        <option value="Linabo">Linabo</option>
+                                        <option value="Magsaysay">Magsaysay</option>
+                                        <option value="Poblacion">Poblacion</option>
+                                        <option value="San Jose">San Jose</option>
+                                        <option value="Sumpong">Sumpong</option>
+                                        <option value="Zamboanguita">Zamboanguita</option>
+                                    </select>
+                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                </div>
+                            </div>
+
+                            <div className="input-group relative">
+                                <input
+                                    type="email"
+                                    required
+                                    placeholder="Email Address"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full h-12 px-4 pl-12 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all text-slate-700 bg-white"
+                                />
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                            </div>
+
+                            <div className="input-group relative">
+                                <input
+                                    type="tel"
+                                    required
+                                    placeholder="Mobile Number (e.g. 09123456789)"
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
-                                    className="pr-4 pl-[42px]"
+                                    className="w-full h-12 px-4 pl-12 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all text-slate-700 bg-white"
                                 />
-                                <Phone className="input-icon h-5 w-5" />
+                                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                             </div>
+
                             <div className="input-group relative">
-                                <MapPin className="input-icon h-5 w-5" />
-                                <div className="absolute inset-y-0 right-2 flex items-center z-10">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsMapOpen(true)}
-                                        className="p-1.5 bg-slate-100 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all"
-                                        title="Pick from Map"
-                                    >
-                                        <MapPin className="h-4 w-4" />
-                                    </button>
-                                </div>
                                 <input
-                                    type="text"
+                                    type={showPassword ? "text" : "password"}
                                     required
-                                    placeholder="Location (Type or Map)"
-                                    value={barangay}
-                                    onChange={(e) => setBarangay(e.target.value)}
-                                    className="pl-[42px] pr-12 bg-white"
+                                    placeholder="Password (min 6 chars)"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full h-12 px-4 pl-12 pr-12 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all text-slate-700 bg-white"
                                 />
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                <button
+                                    type="button"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    aria-label={showPassword ? "Hide password" : "Show password"}
+                                >
+                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
                             </div>
-                        </div>
 
-                        <div className="input-group">
-                            <input
-                                type="email"
-                                required
-                                placeholder="Email Address"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                            <Mail className="input-icon h-5 w-5" />
-                        </div>
-
-                        <div className="input-group">
-                            <input
-                                type={showPassword ? "text" : "password"}
-                                required
-                                placeholder="Password (min 6 chars)"
-                                className="pr-12"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                            <Lock className="input-icon h-5 w-5" />
-                            <button
-                                type="button"
-                                className="password-toggle"
-                                onClick={() => setShowPassword(!showPassword)}
-                                aria-label={showPassword ? "Hide password" : "Show password"}
-                            >
-                                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                            </button>
-                        </div>
-
-                        <div className="input-group">
-                            <input
-                                type={showConfirmPassword ? "text" : "password"}
-                                required
-                                placeholder="Confirm Password"
-                                className="pr-12"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                            />
-                            <Lock className="input-icon h-5 w-5" />
-                            <button
-                                type="button"
-                                className="password-toggle"
-                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                            >
-                                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                            </button>
-                        </div>
-
-                        {/* Error Message */}
-                        {error && (
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 animate-slide-up">
-                                <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
-                                <p className="text-sm text-red-400 font-medium">{error}</p>
+                            <div className="input-group relative">
+                                <input
+                                    type={showConfirmPassword ? "text" : "password"}
+                                    required
+                                    placeholder="Confirm Password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="w-full h-12 px-4 pl-12 pr-12 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all text-slate-700 bg-white"
+                                />
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                <button
+                                    type="button"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                                >
+                                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
                             </div>
-                        )}
 
-                        {/* Success Message */}
-                        {success && (
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 animate-slide-up">
-                                <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0" />
-                                <p className="text-sm text-green-400 font-medium">Account created! Redirecting...</p>
-                            </div>
-                        )}
-
-                        <button
-                            type="submit"
-                            disabled={loading || success}
-                            className="btn-primary mt-2 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                        >
-                            {loading ? (
-                                <>
-                                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    Creating Account...
-                                </>
-                            ) : success ? (
-                                <>
-                                    <CheckCircle className="mr-2 h-5 w-5" />
-                                    Account Created!
-                                </>
-                            ) : (
-                                <>
-                                    Create Account <ArrowRight className="ml-2 h-5 w-5" />
-                                </>
+                            {/* Error Message */}
+                            {error && (
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
+                                    <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                    <p className="text-sm text-red-600 font-medium">{error}</p>
+                                </div>
                             )}
-                        </button>
 
-                        {!isLocalIP ? (
-                            <div className="flex justify-center mt-2 scale-[0.85] origin-center opacity-90 hover:opacity-100 transition-opacity">
-                                <ReCAPTCHA
-                                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
-                                    onChange={onCaptchaChange}
-                                    onExpired={onCaptchaExpired}
-                                    theme="light"
-                                />
+                            {/* Success Message */}
+                            {success && (
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-100">
+                                    <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                                    <p className="text-sm text-green-600 font-medium">Account created! Redirecting...</p>
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={loading || success}
+                                className="btn-premium w-full h-12 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                            >
+                                {loading ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Creating Account...
+                                    </>
+                                ) : success ? (
+                                    <>
+                                        <CheckCircle className="mr-2 h-5 w-5" />
+                                        Account Created!
+                                    </>
+                                ) : (
+                                    <>
+                                        Create Account <ArrowRight className="ml-2 h-5 w-5" />
+                                    </>
+                                )}
+                            </button>
+
+                            {!isLocalIP ? (
+                                <div className="flex justify-center mt-4">
+                                    <ReCAPTCHA
+                                        sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                                        onChange={onCaptchaChange}
+                                        onExpired={onCaptchaExpired}
+                                        theme="light"
+                                    />
+                                </div>
+                            ) : (
+                                <div className="text-center py-2 px-4 rounded-lg bg-blue-50 border border-blue-100 mt-4">
+                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
+                                        🛡️ Test Mode: reCAPTCHA Paused
+                                    </p>
+                                </div>
+                            )}
+                        </form>
+
+                        <div className="relative my-6">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-slate-200"></div>
                             </div>
-                        ) : (
-                            <div className="text-center py-2 px-4 rounded-lg bg-blue-50 border border-blue-100 mt-2">
-                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
-                                    🛡️ Test Mode: reCAPTCHA Paused
-                                </p>
+                            <div className="relative flex justify-center text-sm font-medium">
+                                <span className="px-4 bg-white text-slate-400">Or sign up with</span>
                             </div>
-                        )}
-                    </form>
-
-                    <div className="relative my-4">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-slate-100"></div>
                         </div>
-                        <div className="relative flex justify-center text-[10px] uppercase tracking-wider font-bold text-slate-400">
-                            <span className="px-2 bg-white">Or sign up with</span>
-                        </div>
-                    </div>
 
-                    <div className="flex flex-col gap-3">
                         <button
                             type="button"
                             onClick={handleGoogleSignUp}
-                            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border-2 border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all"
+                            className="w-full flex items-center justify-center gap-3 h-12 bg-white border border-slate-200 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                         >
                             <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.47h4.84c-.21 1.12-.83 2.07-1.79 2.71v2.25h2.91c1.7-1.56 2.68-3.86 2.68-6.59z" fill="#4285F4" />
@@ -347,18 +399,18 @@ export default function SignUp() {
                             </svg>
                             Continue with Google
                         </button>
-                    </div>
 
-                    <div className="text-center mt-6">
-                        <p className="text-slate-500 text-sm font-medium">
-                            Already have an account?{' '}
-                            <Link
-                                to="/login"
-                                className="text-blue-600 font-bold hover:underline transition-all"
-                            >
-                                Sign In
-                            </Link>
-                        </p>
+                        <div className="text-center mt-6">
+                            <p className="text-slate-500 text-sm font-medium">
+                                Already have an account?{' '}
+                                <Link
+                                    to="/login"
+                                    className="text-blue-600 font-bold hover:text-blue-700 transition-colors"
+                                >
+                                    Sign In
+                                </Link>
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

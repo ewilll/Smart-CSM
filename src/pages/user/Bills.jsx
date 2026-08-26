@@ -80,9 +80,9 @@ export default function Bills() {
 
     const getStatusStyle = (status) => {
         switch (status) {
-            case 'Paid': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
-            case 'Unpaid': return 'bg-amber-50 text-amber-600 border-amber-100';
-            case 'Overdue': return 'bg-rose-50 text-rose-600 border-rose-100';
+            case 'Paid': return 'bg-green-50 text-green-700 border-green-100';
+            case 'Unpaid': return 'bg-yellow-50 text-yellow-700 border-yellow-100';
+            case 'Overdue': return 'bg-red-50 text-red-700 border-red-100';
             default: return 'bg-slate-50 text-slate-600 border-slate-100';
         }
     };
@@ -105,8 +105,9 @@ export default function Bills() {
                     setSearchQuery={setSearchQuery}
                     title={t('bills')}
                     subtitle={t('billing_system_subtitle')}
-                    icon={<Receipt size={28} />}
-                    iconBgColor="bg-gradient-to-br from-blue-600 to-indigo-600"
+                    icon={<Receipt size={28} toggleSidebar={toggleSidebar}
+                    />}
+                    iconBgColor="bg-blue-600"
                 />
 
                 {/* Unpaid Summary Card */}
@@ -119,7 +120,7 @@ export default function Bills() {
                                 setFilterStatus('Unpaid');
                             }
                         }}
-                        className="lg:col-span-2 p-8 rounded-[40px] bg-white border border-blue-100 shadow-2xl shadow-blue-500/5 relative overflow-hidden group cursor-pointer hover:shadow-blue-500/10 transition-all active:scale-[0.99]"
+                        className="lg:col-span-2 p-6 rounded-2xl bg-white border border-slate-100 shadow-sm relative overflow-hidden cursor-pointer hover:border-blue-200 transition-all"
                     >
                         <div className="relative z-10">
                             <span className="inline-block px-4 py-1.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-[0.2em] mb-6">{t('latest_bill')}</span>
@@ -133,7 +134,7 @@ export default function Bills() {
                                     <p className="text-slate-500 font-medium mb-8">{t('due_date_label')}: {new Date(bills.find(b => b.status === 'Unpaid').due_date).toLocaleDateString()}</p>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); /* Payment logic here */ }}
-                                        className="btn-primary !w-auto px-10 h-14"
+                                        className="bg-blue-600 text-white rounded-xl px-4 py-2 font-semibold hover:bg-blue-700 flex items-center justify-center gap-2 mt-4"
                                     >
                                         {t('pay_now')} <ArrowRight size={20} />
                                     </button>
@@ -148,12 +149,12 @@ export default function Bills() {
                                 </div>
                             )}
                         </div>
-                        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-50 rounded-full -mr-32 -mt-32 group-hover:scale-110 transition-transform duration-1000"></div>
+                        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-50 rounded-full -mr-32 -mt-32"></div>
                     </div>
 
                     <div
                         onClick={() => navigate('/settings')}
-                        className="p-8 rounded-[40px] bg-slate-900 text-white shadow-2xl shadow-slate-900/20 flex flex-col justify-center cursor-pointer hover:bg-slate-800 transition-all active:scale-[0.98] group"
+                        className="p-6 rounded-2xl bg-slate-800 text-white shadow-sm flex flex-col justify-center cursor-pointer hover:bg-slate-700 transition-all"
                     >
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-blue-400 transition-colors">{t('account_summary')}</p>
                         <h4 className="text-2xl font-black mb-6">{user.account_no || '--- --- ---'}</h4>
@@ -167,7 +168,7 @@ export default function Bills() {
                 </div>
 
                 {/* Bills Table */}
-                <div className="floating-card p-8">
+                <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                         <h3 className="text-xl font-black text-slate-800 tracking-tight">{t('billing_history')}</h3>
 
@@ -196,17 +197,17 @@ export default function Bills() {
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead>
-                                    <tr className="border-b border-slate-50">
-                                        <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest px-4">{t('bill_id_period')}</th>
-                                        <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest px-4">{t('reading_label')}</th>
-                                        <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest px-4">{t('amount_label')}</th>
-                                        <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 text-center">{t('status')}</th>
-                                        <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 text-right">Action</th>
+                                    <tr className="border-b border-slate-100">
+                                        <th className="py-3 text-xs font-bold text-slate-500 uppercase tracking-wide px-4">{t('bill_id_period')}</th>
+                                        <th className="py-3 text-xs font-bold text-slate-500 uppercase tracking-wide px-4">{t('reading_label')}</th>
+                                        <th className="py-3 text-xs font-bold text-slate-500 uppercase tracking-wide px-4">{t('amount_label')}</th>
+                                        <th className="py-3 text-xs font-bold text-slate-500 uppercase tracking-wide px-4 text-center">{t('status')}</th>
+                                        <th className="py-3 text-xs font-bold text-slate-500 uppercase tracking-wide px-4 text-right">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredBills.map((bill) => (
-                                        <tr key={bill.id} className="group hover:bg-slate-50 transition-all border-b border-slate-50 last:border-0">
+                                        <tr key={bill.id} className="group hover:bg-slate-50 transition-all border-b border-slate-100 last:border-0">
                                             <td className="py-6 px-4">
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">

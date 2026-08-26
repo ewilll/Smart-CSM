@@ -9,11 +9,14 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "seed:admin": "node scripts/seed_admin.mjs"
+    "seed:admin": "node scripts/seed_admin.mjs",
+    "seed:dummy": "node scripts/seed_dummy_data.mjs"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
+    "browser-image-compression": "^2.0.2",
     "dotenv": "^17.3.1",
     "framer-motion": "^12.34.0",
     "jspdf": "^4.2.0",
@@ -22,7 +25,9 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-google-recaptcha": "^3.1.0",
+    "react-hot-toast": "^2.6.0",
     "react-leaflet": "^5.0.0",
+    "react-leaflet-cluster": "^4.1.3",
     "react-qr-code": "^2.0.18",
     "react-router-dom": "^7.13.0",
     "recharts": "^3.7.0",

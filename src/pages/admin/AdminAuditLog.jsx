@@ -22,6 +22,7 @@ export default function AdminAuditLog() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterTable, setFilterTable] = useState('all');
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -177,7 +178,7 @@ export default function AdminAuditLog() {
 
     return (
         <div className="dashboard-layout">
-            <Sidebar isOpen={false} toggleSidebar={() => { }} />
+            <Sidebar isOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
             <main className="dashboard-main overflow-hidden h-screen flex flex-col relative bg-slate-50">
                 <DashboardHeader
                     user={user}
@@ -192,6 +193,7 @@ export default function AdminAuditLog() {
                     icon={<Database size={28} />}
                     iconBgColor="bg-slate-800"
                     placeholder="Search logs or actors..."
+                    toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
                 />
                 <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col h-full px-8 pb-8 overflow-hidden">
                     {/* Header Controls */}
@@ -218,31 +220,33 @@ export default function AdminAuditLog() {
                     </div>
 
                     {/* Data Table */}
-                    <div className="bg-white border text-left border-slate-200 rounded-3xl shadow-sm flex-1 overflow-hidden flex flex-col mb-4">
-                        <div className="bg-slate-800 text-slate-300 text-[10px] font-black uppercase tracking-widest flex items-center p-4 border-b border-slate-700 shrink-0">
-                            <div className="w-48 ml-4">Timestamp (UTC+8)</div>
-                            <div className="w-48">Actor</div>
-                            <div className="w-32">Action</div>
-                            <div className="w-48">Target Table</div>
-                            <div className="flex-1">Brief Description</div>
-                        </div>
+                    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex-1 overflow-hidden flex flex-col mb-4">
+                        <div className="overflow-x-auto">
+                            <div className="min-w-[800px]">
+                                <div className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest flex items-center p-4 border-b border-slate-100 shrink-0">
+                                    <div className="w-48 ml-4">Timestamp (UTC+8)</div>
+                                    <div className="w-48">Actor</div>
+                                    <div className="w-32">Action</div>
+                                    <div className="w-48">Target Table</div>
+                                    <div className="flex-1">Brief Description</div>
+                                </div>
 
-                        <div className="overflow-y-auto flex-1 custom-scrollbar">
-                            {loading ? (
-                                <div className="flex items-center justify-center h-64 text-slate-400 font-bold uppercase tracking-widest text-[10px]">
-                                    <RefreshCw className="animate-spin mr-3" /> Fetching raw logs...
-                                </div>
-                            ) : paginatedLogs.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-                                    <ShieldAlert size={48} className="mb-4 text-slate-200" />
-                                    <p className="font-bold">No audit records found.</p>
-                                </div>
-                            ) : (
-                                paginatedLogs.map((log, index) => (
-                                    <div
-                                        key={log.id}
+                                <div className="overflow-y-auto max-h-[60vh] custom-scrollbar">
+                                    {loading ? (
+                                        <div className="flex items-center justify-center h-64 text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                                            <RefreshCw className="animate-spin mr-3" /> Fetching raw logs...
+                                        </div>
+                                    ) : paginatedLogs.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                                            <ShieldAlert size={48} className="mb-4 text-slate-200" />
+                                            <p className="font-bold">No audit records found.</p>
+                                        </div>
+                                    ) : (
+                                        paginatedLogs.map((log, index) => (
+                                            <div
+                                                key={log.id}
                                         onClick={() => toggleLog(log)}
-                                        className={`flex items-center p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}
+                                        className={`flex items-center p-4 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer group bg-white`}
                                     >
                                         <div className="w-48 ml-4 flex items-center gap-2 text-xs font-bold text-slate-500">
                                             <Clock size={12} className="text-slate-400" />
@@ -272,12 +276,14 @@ export default function AdminAuditLog() {
                                 ))
                             )}
                         </div>
+                            </div>
+                        </div>
 
                         {/* Footer Status & Pagination */}
                         <div className="bg-slate-50 border-t border-slate-100 p-3 flex justify-between items-center shrink-0">
                             <div className="flex items-center gap-6">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
                                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Logging Active</span>
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
@@ -309,7 +315,7 @@ export default function AdminAuditLog() {
                 {selectedLog && (
                     <>
                         <div
-                            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] animate-fade-in"
+                            className="fixed inset-0 bg-slate-900/40 z-[100] animate-fade-in"
                             onClick={() => setSelectedLog(null)}
                         />
                         <div className="fixed top-0 right-0 h-full w-[450px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] z-[101] animate-slide-left flex flex-col">

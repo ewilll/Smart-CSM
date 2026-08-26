@@ -53,6 +53,7 @@ export default function PublicLog() {
             const { data, error } = await supabase
                 .from('incidents')
                 .select('id, type, location, status, created_at, severity, description')
+                .neq('status', 'Archived')
                 .order('created_at', { ascending: false })
                 .limit(50);
 
@@ -128,17 +129,18 @@ export default function PublicLog() {
                     setSearchQuery={setSearchQuery}
                     title={t('public_log_title')}
                     subtitle={t('public_log_subtitle')}
-                    icon={<Activity size={28} />}
-                    iconBgColor="bg-gradient-to-br from-indigo-500 to-purple-600"
+                    icon={<Activity size={28} toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                    />}
+                    iconBgColor="bg-blue-600"
                 />
 
                 {/* Community Impact Metrics - Fluid & Responsive */}
                 <div className="flex flex-wrap items-stretch gap-4 sm:gap-6 mb-12">
                     <div
                         onClick={() => navigate('/service-map')}
-                        className="flex-1 min-w-[280px] bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-5 group hover:border-indigo-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all"
+                        className="flex-1 w-full sm:w-auto min-w-full sm:min-w-[280px] bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-5 cursor-pointer hover:border-blue-200 transition-all"
                     >
-                        <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 transition-all">
                             <ShieldCheck size={28} />
                         </div>
                         <div>
@@ -148,9 +150,9 @@ export default function PublicLog() {
                     </div>
                     <div
                         onClick={() => navigate('/support')}
-                        className="flex-1 min-w-[280px] bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-5 group hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all"
+                        className="flex-1 w-full sm:w-auto min-w-full sm:min-w-[280px] bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-5 cursor-pointer hover:border-blue-200 transition-all"
                     >
-                        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 transition-all">
                             <Activity size={28} />
                         </div>
                         <div>
@@ -160,9 +162,9 @@ export default function PublicLog() {
                     </div>
                     <div
                         onClick={() => navigate('/service-map')}
-                        className="flex-1 min-w-[280px] bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-5 group hover:border-emerald-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all"
+                        className="flex-1 w-full sm:w-auto min-w-full sm:min-w-[280px] bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-5 cursor-pointer hover:border-blue-200 transition-all"
                     >
-                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 transition-all">
                             <MapPin size={28} />
                         </div>
                         <div>
@@ -189,7 +191,7 @@ export default function PublicLog() {
                             <input
                                 type="text"
                                 placeholder="Search by barangay or issue type..."
-                                className="w-full h-12 pl-12 pr-4 rounded-xl border border-slate-200 bg-white shadow-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-semibold text-sm text-slate-700"
+                                className="w-full h-12 pl-12 pr-4 rounded-xl border border-slate-200 bg-white shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all font-semibold text-sm text-slate-700"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -211,11 +213,11 @@ export default function PublicLog() {
                                     <div
                                         key={incident.id}
                                         onClick={() => { setSelectedIncident(incident); setIsModalOpen(true); }}
-                                        className="bg-white rounded-[24px] p-6 shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-200 transition-all duration-300 group cursor-pointer active:scale-[0.98]"
+                                        className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-sm hover:border-blue-200 transition-all duration-300 group cursor-pointer"
                                     >
                                         <div className="flex justify-between items-start mb-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                                <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 transition-all">
                                                     <AlertCircle size={20} />
                                                 </div>
                                                 <div>
@@ -264,17 +266,17 @@ export default function PublicLog() {
 
                 {/* --- INCIDENT DETAIL MODAL --- */}
                 {isModalOpen && selectedIncident && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsModalOpen(false)}>
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60" onClick={() => setIsModalOpen(false)}>
                         <div
-                            className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl shadow-slate-900/40 overflow-hidden animate-scale-up"
+                            className="bg-white w-full max-w-2xl rounded-2xl shadow-sm overflow-hidden"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <div className="relative h-32 bg-gradient-to-br from-indigo-500 to-purple-600 p-8 flex justify-between items-start">
+                            <div className="relative h-32 bg-blue-600 p-8 flex justify-between items-start">
                                 <div>
                                     <h3 className="text-2xl font-black text-white tracking-tight leading-none mb-1">{selectedIncident.type || 'Issue Detail'}</h3>
-                                    <p className="text-indigo-100 text-xs font-bold uppercase tracking-widest">Incident Tracking #{selectedIncident.id ? selectedIncident.id.slice(0, 8) : '0000'}</p>
+                                    <p className="text-blue-100 text-xs font-bold uppercase tracking-widest">Incident Tracking #{selectedIncident.id ? selectedIncident.id.slice(0, 8) : '0000'}</p>
                                 </div>
-                                <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 rounded-2xl bg-white/20 text-white flex items-center justify-center hover:bg-white hover:text-indigo-600 transition-all">
+                                <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 rounded-2xl bg-white/20 text-white flex items-center justify-center hover:bg-white hover:text-blue-600 transition-all">
                                     <AlertCircle size={20} className="rotate-45" />
                                 </button>
                             </div>
@@ -298,17 +300,17 @@ export default function PublicLog() {
 
                                 <div className="mb-8">
                                     <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <Activity size={16} className="text-indigo-600" />
+                                        <Activity size={16} className="text-blue-600" />
                                         {t('report_journey')}
                                     </h4>
 
                                     <div className="relative space-y-6 pl-8 border-l-2 border-slate-100 ml-3 py-2">
                                         {/* Timeline Logic */}
                                         <div className="relative">
-                                            <div className="absolute -left-[41px] top-0 w-6 h-6 rounded-full bg-indigo-600 border-4 border-white shadow-sm flex items-center justify-center">
+                                            <div className="absolute -left-[41px] top-0 w-6 h-6 rounded-full bg-blue-600 border-4 border-white shadow-sm flex items-center justify-center">
                                                 <div className="w-1 h-1 bg-white rounded-full"></div>
                                             </div>
-                                            <p className="text-[10px] font-black text-indigo-600 uppercase mb-1">{t('reported')}</p>
+                                            <p className="text-[10px] font-black text-blue-600 uppercase mb-1">{t('reported')}</p>
                                             <p className="text-sm font-bold text-slate-800">{t('issue_logged')}</p>
                                             <p className="text-[10px] text-slate-400 font-medium">{new Date(selectedIncident.created_at).toLocaleDateString()}</p>
                                         </div>

@@ -15,7 +15,6 @@ import Support from './pages/user/Support';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MapDashboard from './pages/admin/MapDashboard';
 import AdminAuditLog from './pages/admin/AdminAuditLog';
-import AILearning from './pages/admin/AILearning';
 import SystemConfig from './pages/admin/SystemConfig';
 import AppHistory from './pages/user/History';
 import PublicLog from './pages/user/PublicLog';
@@ -35,6 +34,8 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminRoute from './components/auth/AdminRoute';
 import { NotificationProvider } from './context/NotificationContext';
 import { PreferencesProvider } from './context/PreferencesContext';
+import MockPhoneNotification from './components/common/MockPhoneNotification';
+import { Toaster } from 'react-hot-toast';
 
 // Auth State Handler Component
 function AuthHandler({ setGlobalLoading, setAuthSettled }) {
@@ -208,7 +209,8 @@ function App() {
           <PreferencesProvider>
             <NotificationProvider>
               <RouteErrorBoundary>
-              <GlobalTicker />
+              <Toaster position="top-right" />
+              <MockPhoneNotification />
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/services" element={<Home />} />
@@ -235,7 +237,6 @@ function App() {
                 <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
                 <Route path="/admin/map" element={<AdminRoute><MapDashboard /></AdminRoute>} />
                 <Route path="/admin/audit" element={<AdminRoute><AdminAuditLog /></AdminRoute>} />
-                <Route path="/admin/learning" element={<AdminRoute><AILearning /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><SystemConfig /></AdminRoute>} />
                 <Route path="/admin/messages" element={<AdminRoute><Inbox /></AdminRoute>} />
 

@@ -4,7 +4,7 @@ import Sidebar from '../../components/Sidebar';
 import { History, FileText, CheckCircle, Clock, AlertCircle, Receipt, Megaphone, MoreHorizontal, Trash2, ArrowRight } from 'lucide-react';
 import { getCurrentUser, isAuthenticated } from '../../utils/auth';
 import { supabase } from '../../utils/supabaseClient';
-import { motion, AnimatePresence } from 'framer-motion';
+
 import DashboardHeader from '../../components/common/DashboardHeader';
 import { usePreferences } from '../../context/PreferencesContext';
 import { useTranslation } from '../../utils/translations';
@@ -48,11 +48,12 @@ export default function AppHistory() {
     const fetchHistory = async (currentUser) => {
         setLoading(true);
         try {
-            // 1. Fetch Incidents
+            // 1. Fetch Incidents (Hide Archived)
             const { data: incidentData } = await supabase
                 .from('incidents')
                 .select('*')
                 .eq('user_id', currentUser.id)
+                .neq('status', 'Archived')
                 .order('created_at', { ascending: false });
 
             // 2. Fetch Bills
@@ -152,13 +153,14 @@ export default function AppHistory() {
                     setSearchQuery={setSearchQuery}
                     title={t('activity_history')}
                     subtitle={t('recent_actions')}
-                    icon={<History size={28} />}
-                    iconBgColor="bg-gradient-to-br from-blue-600 to-indigo-600"
+                    icon={<History size={28} toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                    />}
+                    iconBgColor="bg-blue-600"
                 />
 
                 <div className="max-w-4xl mx-auto space-y-8">
-                    <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                             <h2 className="text-xl font-black text-slate-800 tracking-tight">{t('timeline')}</h2>
                             {loading && <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>}
                         </div>
@@ -169,6 +171,7 @@ export default function AppHistory() {
                                         key={log.id}
                                         log={log}
                                         navigate={navigate}
+                                        t={t}
                                     />
                                 ))
                             ) : !loading && (
@@ -192,7 +195,7 @@ export default function AppHistory() {
     );
 }
 
-function HistoryItem({ log, navigate }) {
+function HistoryItem({ log, navigate, t }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [isHidden, setIsHidden] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
@@ -231,17 +234,13 @@ function HistoryItem({ log, navigate }) {
             </div>
 
             {/* EXPANDED CONTAINER */}
-            <AnimatePresence>
                 {isExpanded && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
+                    <div
                         className="overflow-hidden"
                     >
                         <div className="px-6 pb-6 pt-2 md:pl-[88px]">
-                            <div className="p-6 bg-white rounded-3xl border border-blue-100 shadow-xl shadow-blue-500/5 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none"></div>
+                            <div className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
                                 <h4 className="text-sm font-black text-slate-800 mb-2 uppercase tracking-widest">{log.action}</h4>
                                 <p className="text-slate-600 font-medium mb-6 leading-relaxed">{log.details}</p>
 
@@ -273,9 +272,8 @@ function HistoryItem({ log, navigate }) {
                                 </button>
                             </div>
                         </div>
-                    </motion.div>
+                    </div>
                 )}
-            </AnimatePresence>
 
             {/* Meatball Menu */}
             <div className="absolute right-6 top-8" ref={menuRef}>
@@ -289,13 +287,9 @@ function HistoryItem({ log, navigate }) {
                     <MoreHorizontal size={20} />
                 </button>
 
-                <AnimatePresence>
-                    {menuOpen && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.9, y: -10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                            className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-100 z-50 py-2"
+                {menuOpen && (
+                        <div
+                            className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-sm border border-slate-100 z-50 py-2"
                         >
                             <button
                                 onClick={(e) => { e.stopPropagation(); setIsHidden(true); }}
@@ -325,9 +319,8 @@ function HistoryItem({ log, navigate }) {
                                 </div>
                                 {t('filter_similar')}
                             </button>
-                        </motion.div>
+                        </div>
                     )}
-                </AnimatePresence>
             </div>
         </div>
     );

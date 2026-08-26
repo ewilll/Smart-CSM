@@ -215,6 +215,16 @@ export default function ProfileManagementModal({ isOpen, onClose, user, onUpdate
                                 placeholder="https://example.com/my-photo.jpg"
                             />
                         </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Contact Number (For SMS Alerts)</label>
+                            <input
+                                type="text"
+                                value={profileForm.phone}
+                                onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                placeholder="e.g. 09123456789"
+                            />
+                        </div>
                     </div>
 
                     {message && (

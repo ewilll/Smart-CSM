@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, Rectangle } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '../../utils/supabaseClient';
 import Sidebar from '../../components/Sidebar';
@@ -63,6 +64,16 @@ export default function MapDashboard() {
     const [filterPriority, setFilterPriority] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedMapIncident, setSelectedMapIncident] = useState(null);
+    const [mapInstance, setMapInstance] = useState(null);
+
+    const handleCardClick = (incident) => {
+        if (incident.latitude && incident.longitude && mapInstance) {
+            mapInstance.flyTo([incident.latitude, incident.longitude], 17, {
+                animate: true,
+                duration: 1.5
+            });
+        }
+    };
 
     useEffect(() => {
         fetchIncidents();
@@ -134,29 +145,34 @@ export default function MapDashboard() {
         return matchesPriority && matchesSearch && i.status !== 'Resolved';
     });
 
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
     return (
         <div className="dashboard-layout">
-            <Sidebar isOpen={false} toggleSidebar={() => { }} />
+            <Sidebar isOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 
             <main className="dashboard-main !p-0 flex flex-col h-screen overflow-hidden">
-                <DashboardHeader
-                    user={user}
-                    onUpdateUser={setUser}
-                    title="Command Center"
-                    subtitle="Live Incident Monitoring"
-                    icon={<MapIcon size={28} />}
-                    iconBgColor="bg-blue-600"
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                />
-                <div className="flex-1 flex overflow-hidden relative">
+                <div className="p-4 md:p-6 lg:p-8 shrink-0">
+                    <DashboardHeader
+                        user={user}
+                        onUpdateUser={setUser}
+                        title="Command Center"
+                        subtitle="Live Incident Monitoring"
+                        icon={<MapIcon size={28} />}
+                        iconBgColor="bg-blue-600"
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                    />
+                </div>
+                <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
                     {/* Left Side: Map Container */}
-                    <div className="flex-1 relative">
+                    <div className="flex-1 relative min-h-[50vh] lg:min-h-0 hidden md:block">
                         {/* Map Filter Overlay */}
-                        <div className="absolute top-6 left-16 z-[1000] flex items-center gap-4">
+                        <div className="absolute top-4 left-4 lg:top-6 lg:left-16 z-[1000] flex items-center gap-4">
 
                             {/* Priority Filters */}
-                            <div className="bg-white/90 backdrop-blur p-1 rounded-xl shadow-2xl border border-slate-100 flex gap-1">
+                            <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-100 flex flex-wrap gap-1">
                                 {['All', 'High', 'Medium', 'Low'].map(p => (
                                     <button
                                         key={p}
@@ -178,6 +194,7 @@ export default function MapDashboard() {
                             style={{ height: '100%', width: '100%' }}
                             scrollWheelZoom={true}
                             className="z-0"
+                            ref={setMapInstance}
                         >
                             <TileLayer
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -204,53 +221,119 @@ export default function MapDashboard() {
                                 />
                             )}
 
-                            {incidents.map((incident) => (
-                                <Marker
-                                    key={incident.id}
-                                    position={[parseFloat(incident.latitude), parseFloat(incident.longitude)]}
-                                    icon={incident.status === 'Resolved' ? greenIcon : redIcon}
+                            {/* Mock Scheduled Interruptions */}
+                            {[
+                                { id: 1, location: "Malaybalay Poblacion", bounds: [[8.1250, 125.1250], [8.1350, 125.1400]], reason: "Pipe Relocation" },
+                                { id: 2, location: "Casisang", bounds: [[8.1000, 125.1300], [8.1150, 125.1450]], reason: "Pump Maintenance" }
+                            ].map(interruption => (
+                                <Rectangle
+                                    key={`interruption-${interruption.id}`}
+                                    bounds={interruption.bounds}
+                                    pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2 }}
                                 >
                                     <Popup>
-                                        <div className="min-w-[240px] p-1">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <h4 className="font-black text-slate-800 text-base m-0 leading-tight">{incident.type}</h4>
-                                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${incident.severity === 'High' ? 'bg-rose-100 text-rose-600' :
-                                                    incident.severity === 'Medium' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
-                                                    }`}>
-                                                    {incident.severity}
-                                                </span>
-                                            </div>
-                                            <p className="text-[10px] text-slate-400 font-bold mb-3">{incident.location}</p>
-
-                                            <div className="flex gap-2 mt-4">
-                                                {incident.status !== 'Resolved' && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleUpdateStatus(incident.id, 'Dispatched')}
-                                                            className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-colors"
-                                                        >
-                                                            Dispatch
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleUpdateStatus(incident.id, 'Resolved')}
-                                                            className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-colors"
-                                                        >
-                                                            Resolve
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
+                                        <div className="p-1">
+                                            <h4 className="font-black text-blue-700 text-sm m-0">Scheduled Interruption</h4>
+                                            <p className="text-[10px] text-slate-500 font-bold mt-1">Location: {interruption.location}</p>
+                                            <p className="text-[10px] text-slate-500 font-bold">Reason: {interruption.reason}</p>
                                         </div>
                                     </Popup>
-                                </Marker>
+                                </Rectangle>
                             ))}
+                            
+                            <MarkerClusterGroup
+                                chunkedLoading
+                                maxClusterRadius={60}
+                                disableClusteringAtZoom={16}
+                            >
+                                {incidents.map((incident) => (
+                                    <Marker
+                                        key={incident.id}
+                                        position={[parseFloat(incident.latitude), parseFloat(incident.longitude)]}
+                                        icon={incident.status === 'Resolved' ? greenIcon : redIcon}
+                                    >
+                                        <Popup>
+                                            <div className="min-w-[240px] p-1">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h4 className="font-black text-slate-800 text-base m-0 leading-tight">{incident.type}</h4>
+                                                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${incident.severity === 'High' ? 'bg-rose-100 text-rose-600' :
+                                                        incident.severity === 'Medium' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
+                                                        }`}>
+                                                        {incident.severity}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 font-bold mb-3">Location: {incident.location}</p>
+                                                
+                                                <div className="flex gap-2 mt-4">
+                                                    {incident.status !== 'Resolved' && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleUpdateStatus(incident.id, 'Dispatched')}
+                                                                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-colors"
+                                                            >
+                                                                Dispatch
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleUpdateStatus(incident.id, 'Resolved')}
+                                                                className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-colors"
+                                                            >
+                                                                Resolve
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                ))}
+                            </MarkerClusterGroup>
                         </MapContainer>
+
+                        {/* Map Legend */}
+                        <div className="absolute bottom-6 right-6 z-[1000] bg-white border border-slate-200 rounded-xl p-4 shadow-sm pointer-events-auto">
+                            <h4 className="text-xs font-black uppercase text-slate-800 mb-3 tracking-widest">Map Legend</h4>
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                                    <span className="text-xs font-bold text-slate-600">Active Incident</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
+                                    <span className="text-xs font-bold text-slate-600">Resolved Incident</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-dashed border-red-500 bg-red-500/10"></div>
+                                    <span className="text-xs font-bold text-slate-600">Affected Barangay</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-blue-500 bg-blue-500/20"></div>
+                                    <span className="text-xs font-bold text-slate-600">Scheduled Water Interruption</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Right Side: Incident List Side Panel */}
-                    <div className="w-96 bg-white border-l border-slate-100 flex flex-col shadow-2xl z-10">
-                        <div className="p-8 border-b border-slate-50">
+                    <div className="w-full lg:w-96 bg-white border-t lg:border-l lg:border-t-0 border-slate-100 flex flex-col shadow-sm z-10 min-h-[50vh] lg:min-h-0">
+                        <div className="p-4 lg:p-8 border-b border-slate-50 flex-shrink-0">
                             <h3 className="text-xl font-black text-slate-800 mb-4">Active Queue</h3>
+                            
+                            {/* Priority Filters (Mobile Only) */}
+                            <div className="lg:hidden bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200 flex gap-1 mb-4 overflow-x-auto custom-scrollbar">
+                                {['All', 'High', 'Medium', 'Low'].map(p => (
+                                    <button
+                                        key={p}
+                                        onClick={() => setFilterPriority(p)}
+                                        className={`flex-1 min-w-[70px] px-3 py-1.5 rounded-lg text-xs font-black transition-all ${filterPriority === p
+                                            ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'
+                                            : 'text-slate-500 hover:bg-slate-200'
+                                            }`}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+
                             <div className="relative">
                                 <input
                                     type="text"
@@ -268,6 +351,7 @@ export default function MapDashboard() {
                                 filteredIncidents.map(incident => (
                                     <div
                                         key={incident.id}
+                                        onClick={() => handleCardClick(incident)}
                                         className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all group hover:shadow-xl hover:shadow-blue-500/5 cursor-pointer bg-white"
                                     >
                                         <div className="flex justify-between items-start mb-2">

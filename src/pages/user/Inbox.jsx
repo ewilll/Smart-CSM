@@ -74,11 +74,13 @@ export default function Inbox() {
         return () => supabase.removeChannel(channel);
     }, [navigate, selectedConv?.id]);
 
-    // Cross-tab synchronization for Capstone Demo (allows Admin and User to chat in two different windows)
     useEffect(() => {
         const handleStorageChange = (e) => {
-            if (e.key === 'mock_messages' && selectedConv) {
-                fetchMessages(selectedConv.id);
+            if (e.key === 'mock_messages') {
+                fetchConversations(user?.id);
+                if (selectedConv) {
+                    fetchMessages(selectedConv.id);
+                }
             }
         };
         window.addEventListener('storage', handleStorageChange);
@@ -101,7 +103,15 @@ export default function Inbox() {
                     .select('id, full_name, role')
                     .eq('role', 'customer');
 
-                const localMsgs = JSON.parse(localStorage.getItem('mock_messages') || '[]');
+                let localMsgs = JSON.parse(localStorage.getItem('mock_messages') || 'null');
+                if (!localMsgs) {
+                    localMsgs = [
+                        { id: 1, sender_id: users?.[0]?.id, recipient_id: user?.id, content: 'Hello, I have an issue with my bill.', created_at: new Date(Date.now() - 3600000).toISOString() },
+                        { id: 2, sender_id: user?.id, recipient_id: users?.[0]?.id, content: 'Sure, let me check that for you. What is your account number?', created_at: new Date(Date.now() - 3000000).toISOString() },
+                        { id: 3, sender_id: users?.[1]?.id, recipient_id: user?.id, content: 'Thanks for resolving my water leak!', created_at: new Date(Date.now() - 86400000).toISOString() }
+                    ];
+                    localStorage.setItem('mock_messages', JSON.stringify(localMsgs));
+                }
 
                 const adminConvs = (users || []).map(u => {
                     const userMsgs = localMsgs.filter(m => m.sender_id === u.id || m.recipient_id === u.id);
@@ -129,13 +139,17 @@ export default function Inbox() {
                     .limit(1)
                     .single();
 
+                let localMsgs = JSON.parse(localStorage.getItem('mock_messages') || '[]');
+                const userMsgs = localMsgs.filter(m => m.sender_id === user.id || m.recipient_id === user.id);
+                const lastMsg = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].content : t('how_can_help');
+
                 const staticConvs = [
                     {
                         id: adminProfile?.id || 'admin_support',
                         name: adminProfile?.full_name || 'PrimeWater Support',
                         role: 'Official Admin',
                         avatar: null,
-                        lastMsg: t('how_can_help'),
+                        lastMsg: lastMsg,
                         time: t('just_now'),
                         unread: 0,
                         online: true
@@ -154,15 +168,23 @@ export default function Inbox() {
     const fetchMessages = async (convId) => {
         if (!user || !convId) return;
         try {
-            const { data, error } = await supabase
-                .from('messages')
-                .select('*')
-                .or(`and(sender_id.eq.${user.id},recipient_id.eq.${convId}),and(sender_id.eq.${convId},recipient_id.eq.${user.id})`)
-                .order('created_at', { ascending: true });
+            let query = supabase.from('messages').select('*').order('created_at', { ascending: true });
+            
+            if (user.role === 'admin') {
+                query = query.or(`sender_id.eq.${convId},recipient_id.eq.${convId}`);
+            } else {
+                query = query.or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`);
+            }
+            
+            const { data, error } = await query;
 
             // Combine with localStorage mock messages for a seamless demo even without a database table
             const localMsgs = JSON.parse(localStorage.getItem('mock_messages') || '[]');
-            const relevantLocal = localMsgs.filter(m => (m.sender_id === user.id && m.recipient_id === convId) || (m.sender_id === convId && m.recipient_id === user.id));
+            const isRelevant = (m) => user.role === 'admin' 
+                ? (m.sender_id === convId || m.recipient_id === convId) 
+                : (m.sender_id === user.id || m.recipient_id === user.id);
+            
+            const relevantLocal = localMsgs.filter(isRelevant);
 
             if (data && !error) {
                 setMessages([...data, ...relevantLocal].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
@@ -172,8 +194,11 @@ export default function Inbox() {
         } catch (err) {
             console.error('Msg fetch error:', err);
             const localMsgs = JSON.parse(localStorage.getItem('mock_messages') || '[]');
-            const relevantLocal = localMsgs.filter(m => (m.sender_id === user.id && m.recipient_id === convId) || (m.sender_id === convId && m.recipient_id === user.id));
-            setMessages(relevantLocal);
+            const isRelevant = (m) => user.role === 'admin' 
+                ? (m.sender_id === convId || m.recipient_id === convId) 
+                : (m.sender_id === user.id || m.recipient_id === user.id);
+            const relevantLocal = localMsgs.filter(isRelevant);
+            setMessages(relevantLocal.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
         }
     };
 
@@ -208,6 +233,7 @@ export default function Inbox() {
 
             // Instantly show msg on UI
             setMessages(prev => [...prev, newMsgObj]);
+            fetchConversations(user.id);
 
             // 2. Try sending to actual Database in background
             const { error } = await supabase
@@ -271,13 +297,14 @@ export default function Inbox() {
                         setSearchQuery={setSearchQuery}
                         title={t('smart_support')}
                         subtitle={t('direct_communication')}
-                        icon={<MessageSquare size={28} />}
-                        iconBgColor="bg-gradient-to-br from-blue-600 to-indigo-600"
+                        icon={<MessageSquare size={28} toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                    />}
+                        iconBgColor="bg-blue-600"
                     />
                 </div>
 
                 <div className="flex-1 overflow-hidden p-8 pt-2">
-                    <div className="bg-white rounded-[40px] shadow-2xl border border-slate-100 h-full flex overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm h-full flex overflow-hidden">
 
                         {/* Sidebar: Conversations List */}
                         <div className="w-full md:w-80 border-r border-slate-50 flex flex-col h-full bg-slate-50/30">
@@ -320,7 +347,7 @@ export default function Inbox() {
                         {/* Chat Window */}
                         <div className="flex-1 flex flex-col h-full bg-white relative">
                             {/* Chat Header */}
-                            <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-10">
+                            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
                                 <div className="flex items-center gap-4">
                                     <button className="md:hidden p-2 hover:bg-slate-100 rounded-xl">
                                         <ChevronLeft size={20} />
@@ -367,17 +394,16 @@ export default function Inbox() {
                                 </div>
                             </div>
 
-                            {/* Messages Area */}
                             <div
                                 ref={scrollRef}
-                                className="flex-1 overflow-y-auto p-8 space-y-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed"
+                                className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50"
                             >
                                 {messages.map((msg, i) => {
                                     const isMe = msg.sender_id === user.id;
                                     return (
                                         <div key={msg.id || i} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-bubble-up`}>
                                             <div className={`max-w-[70%] group relative`}>
-                                                <div className={`p-4 rounded-[28px] ${isMe ? 'bg-blue-600 text-white rounded-tr-none shadow-xl shadow-blue-500/20' : 'bg-slate-100 text-slate-700 rounded-tl-none'} font-medium text-sm leading-relaxed`}>
+                                                <div className={`p-4 rounded-2xl ${isMe ? 'bg-blue-600 text-white rounded-tr-none shadow-sm' : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none shadow-sm'} font-medium text-sm leading-relaxed`}>
                                                     {msg.content}
                                                 </div>
                                                 <div className={`mt-2 flex items-center gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -405,7 +431,7 @@ export default function Inbox() {
                                     <button
                                         type="submit"
                                         disabled={!newMessage.trim() || isSending}
-                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${newMessage.trim() ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 hover:scale-110 active:scale-95' : 'bg-slate-200 text-slate-400'}`}
+                                        className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${newMessage.trim() ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700' : 'bg-slate-200 text-slate-400'}`}
                                     >
                                         <Send size={18} fill={newMessage.trim() ? "currentColor" : "none"} />
                                     </button>

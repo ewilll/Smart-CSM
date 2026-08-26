@@ -133,14 +133,14 @@ export default function ServiceMap() {
                     setSearchQuery={setSearchQuery}
                     title="Service Map"
                     subtitle="Real-time water service and maintenance view"
-                    icon={<MapIcon size={28} />}
-                    iconBgColor="bg-gradient-to-br from-blue-600 to-indigo-600"
+                    icon={<MapIcon size={24} toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                    />}
                 />
 
-                <div className="max-w-7xl">
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-8">
-                        <div className="lg:col-span-3">
-                            <div className="bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden h-[600px] relative z-0">
+                <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="lg:col-span-3 hidden md:block">
+                            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden h-[600px] relative z-0">
                                 <MapContainer
                                     center={userLocation || defaultCenter}
                                     zoom={12}
@@ -174,8 +174,8 @@ export default function ServiceMap() {
                                     {userLocation && (
                                         <Marker position={userLocation} icon={userIcon}>
                                             <Popup>
-                                                <div className="text-center">
-                                                    <p className="font-bold text-blue-600">Your Current Location</p>
+                                                <div className="text-center p-1">
+                                                    <p className="font-semibold text-blue-600 mb-1">Your Current Location</p>
                                                     <p className="text-xs text-slate-500">Service area: Malaybalay City</p>
                                                 </div>
                                             </Popup>
@@ -189,20 +189,20 @@ export default function ServiceMap() {
                                             icon={incidentIcon}
                                         >
                                             <Popup>
-                                                <div className="min-w-[200px]">
+                                                <div className="min-w-[200px] p-1">
                                                     <div className="flex items-center gap-2 mb-2">
-                                                        <div className="p-1.5 bg-rose-100 text-rose-600 rounded-lg">
+                                                        <div className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
                                                             <AlertCircle size={14} />
                                                         </div>
-                                                        <h4 className="font-bold text-slate-800">{incident.type}</h4>
+                                                        <h4 className="font-semibold text-slate-900">{incident.type}</h4>
                                                     </div>
-                                                    <p className="text-xs text-slate-500 mb-2">{incident.location}</p>
-                                                    <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100 italic">
+                                                    <p className="text-xs text-slate-500 mb-3">{incident.location}</p>
+                                                    <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
                                                         "{incident.description}"
                                                     </p>
-                                                    <div className="mt-3 flex items-center justify-between">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Status</span>
-                                                        <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black uppercase tracking-wide">
+                                                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                                                        <span className="text-xs font-medium text-slate-500">Status</span>
+                                                        <span className="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-xs font-medium border border-orange-100">
                                                             {incident.status || 'Active'}
                                                         </span>
                                                     </div>
@@ -213,26 +213,42 @@ export default function ServiceMap() {
 
                                     {userLocation && <ChangeView center={userLocation} />}
                                 </MapContainer>
+
+                                {/* Visual Map Legend inside Map */}
+                                <div className="absolute bottom-6 right-6 z-[1000] bg-white border border-slate-200 rounded-xl p-4 shadow-sm pointer-events-auto">
+                                    <h4 className="text-xs font-black uppercase text-slate-800 mb-3 tracking-widest">Map Legend</h4>
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                                            <span className="text-xs font-bold text-slate-600">Active Issue</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
+                                            <span className="text-xs font-bold text-slate-600">Resolved Issue</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                                            <span className="text-xs font-bold text-slate-600">Your Location</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <div className="space-y-6">
-                            <div
-                                className="floating-card p-6 shadow-2xl"
-                                style={{ backgroundColor: '#2563eb', color: 'white' }}
-                            >
-                                <div className="flex items-center gap-4 mb-4">
-                                    <div className="p-3 bg-white/30 rounded-2xl">
-                                        <Navigation size={24} />
+                            <div className="bg-blue-600 rounded-2xl shadow-sm p-6 text-white">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="p-2 bg-white/20 rounded-lg">
+                                        <Navigation size={20} />
                                     </div>
-                                    <h3 className="font-black text-lg text-white">Nearby Issues</h3>
+                                    <h3 className="font-semibold text-lg text-white">Nearby Issues</h3>
                                 </div>
-                                <p className="font-bold text-sm mb-6 leading-relaxed text-white">
+                                <p className="text-sm text-blue-50 mb-6 leading-relaxed">
                                     Showing {incidents.length} active maintenance or reported issues in your area.
                                 </p>
                                 <button
                                     onClick={detectLocation}
-                                    className="w-full py-3 bg-white text-blue-600 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all"
+                                    className="w-full py-2.5 bg-white text-blue-600 rounded-xl font-medium text-sm hover:bg-blue-50 transition-colors"
                                 >
                                     Recenter My Location
                                 </button>
@@ -240,40 +256,40 @@ export default function ServiceMap() {
 
                             <div
                                 onClick={() => navigate('/info-hub#territory')}
-                                className="floating-card p-6 cursor-pointer hover:shadow-2xl hover:shadow-blue-500/10 transition-all active:scale-[0.98] group"
+                                className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 cursor-pointer hover:border-blue-200 hover:shadow-md transition-all group"
                             >
-                                <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest mb-6 border-b border-slate-100 pb-4 flex items-center justify-between gap-2">
+                                <h4 className="font-semibold text-slate-900 mb-4 border-b border-slate-100 pb-4 flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <Info size={16} className="text-blue-600" />
+                                        <Info size={16} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
                                         Legend
                                     </div>
-                                    <ChevronRight size={14} className="text-slate-300 group-hover:text-blue-600 transition-colors" />
+                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                                 </h4>
                                 <div className="space-y-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
-                                            <MapPin size={20} />
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                            <MapPin size={18} />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-slate-700 leading-none">Your Location</p>
-                                            <p className="text-[10px] text-slate-600 font-bold mt-1 uppercase tracking-tighter">GPS Detected</p>
+                                            <p className="text-sm font-medium text-slate-900">Your Location</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">GPS Detected</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600">
-                                            <Droplets size={20} />
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                                            <Droplets size={18} />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-slate-700 leading-none">Active Issues</p>
-                                            <p className="text-[10px] text-slate-600 font-bold mt-1 uppercase tracking-tighter">Maintenance / Leaks</p>
+                                            <p className="text-sm font-medium text-slate-900">Active Issues</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">Maintenance / Leaks</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="mt-8 p-6 rounded-3xl bg-slate-50 border border-slate-100">
-                                <p className="text-xs text-slate-500 font-medium leading-relaxed italic">
-                                    "Stay informed about your local water network health. We update this map every 15 minutes."
+                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    Stay informed about your local water network health. We update this map every 15 minutes.
                                 </p>
                             </div>
                         </div>

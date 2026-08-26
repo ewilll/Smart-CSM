@@ -30,7 +30,6 @@ import { useTranslation } from '../../utils/translations';
 export default function SystemConfig() {
     const [config, setConfig] = useState({
         MALAYBALAY_BARANGAYS: [],
-        RESPONSES: {},
         HOTLINES: []
     });
     const [loading, setLoading] = useState(true);
@@ -105,11 +104,7 @@ export default function SystemConfig() {
         });
     };
 
-    const updateResponse = (intent, index, value) => {
-        const newResponses = { ...config.RESPONSES };
-        newResponses[intent][index] = value;
-        setConfig({ ...config, RESPONSES: newResponses });
-    };
+
 
     if (loading) {
         return (
@@ -135,6 +130,7 @@ export default function SystemConfig() {
                     subtitle={t('global_dna_subtitle')}
                     icon={<Settings size={28} />}
                     iconBgColor="bg-slate-900"
+                    toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
                     searchQuery={searchTerm}
                     setSearchQuery={setSearchTerm}
                     placeholder={t('searchPlace')}
@@ -157,7 +153,7 @@ export default function SystemConfig() {
                 <div className="p-8 max-w-6xl mx-auto">
                     {/* Server Offline Warning */}
                     {serverOffline && (
-                        <div className="mb-8 p-6 bg-amber-50 border-2 border-amber-200 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 animate-pulse">
+                        <div className="mb-8 p-6 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6">
                             <div className="flex items-center gap-4 text-amber-800">
                                 <div className="p-3 bg-amber-100 rounded-2xl">
                                     <AlertCircle size={24} />
@@ -177,20 +173,13 @@ export default function SystemConfig() {
                     )}
 
                     {/* Tabs Navigation */}
-                    <div className="flex gap-1 bg-slate-100 p-1.5 rounded-2xl w-fit mb-8 shadow-inner">
+                    <div className="flex flex-col sm:flex-row gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-2xl mb-6 w-full sm:w-fit">
                         <button
                             onClick={() => setActiveTab('barangays')}
-                            className={`flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'barangays' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex items-center justify-center sm:justify-start gap-2 px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'barangays' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <Map size={18} />
                             {t('geofenced_barangays')}
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('responses')}
-                            className={`flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'responses' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            <MessageSquare size={18} />
-                            {t('ai_response_library')}
                         </button>
                         <button
                             onClick={() => setActiveTab('general')}
@@ -202,7 +191,7 @@ export default function SystemConfig() {
                     </div>
 
                     {/* Content Section */}
-                    <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden mb-12">
+                    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden mb-12">
                         {activeTab === 'barangays' && (
                             <div className="p-8">
                                 <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -230,16 +219,16 @@ export default function SystemConfig() {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                <div className="flex flex-wrap gap-2">
                                     {config.MALAYBALAY_BARANGAYS?.map((b, idx) => (
                                         <div
                                             key={idx}
-                                            className="group flex items-center justify-between px-4 py-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-xl transition-all"
+                                            className="group flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-xl transition-all"
                                         >
                                             <span className="text-sm font-bold text-slate-700 group-hover:text-blue-700">{b}</span>
                                             <button
                                                 onClick={() => removeBarangay(b)}
-                                                className="text-slate-300 hover:text-red-500 transition-colors ml-2"
+                                                className="text-slate-300 hover:text-red-500 transition-colors"
                                             >
                                                 <X size={14} />
                                             </button>
@@ -249,38 +238,7 @@ export default function SystemConfig() {
                             </div>
                         )}
 
-                        {activeTab === 'responses' && (
-                            <div className="divide-y divide-slate-100">
-                                <div className="p-8 bg-slate-50/50">
-                                    <h2 className="text-2xl font-bold text-slate-900 mb-2">{t('ai_response_personalities')}</h2>
-                                    <p className="text-slate-500">{t('ai_response_desc')}</p>
-                                </div>
-                                <div className="p-8 space-y-10">
-                                    {Object.entries(config.RESPONSES || {}).map(([intent, variations]) => (
-                                        <section key={intent}>
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
-                                                <h3 className="font-black text-xs uppercase tracking-widest text-slate-400">Intent: {intent}</h3>
-                                            </div>
-                                            <div className="space-y-4">
-                                                {variations.map((v, idx) => (
-                                                    <div key={idx} className="relative group">
-                                                        <textarea
-                                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-5 text-sm font-medium text-slate-700 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all resize-none shadow-sm h-28"
-                                                            value={v}
-                                                            onChange={(e) => updateResponse(intent, idx, e.target.value)}
-                                                        />
-                                                        <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <div className="px-3 py-1 bg-white border border-slate-200 rounded-full text-[10px] font-black text-slate-400">VARIATION #{idx + 1}</div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </section>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+
 
                         {activeTab === 'general' && (
                             <div className="p-8 max-w-2xl">

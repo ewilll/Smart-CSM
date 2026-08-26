@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import imageCompression from 'browser-image-compression';
+import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../../components/Sidebar';
 import { getCurrentUser, isAuthenticated } from '../../utils/auth';
@@ -10,6 +12,7 @@ import {
     ChevronDown,
     AlertTriangle,
     Droplet,
+    Info,
     Thermometer,
     Trash2,
     Send,
@@ -35,6 +38,7 @@ export default function ReportIncident() {
     const [formData, setFormData] = useState({
         type: 'Pipe Leakage',
         location: '',
+        address_details: '',
         description: '',
         severity: 'Medium',
         contact_number: '',
@@ -49,6 +53,9 @@ export default function ReportIncident() {
     const [existingIncidents, setExistingIncidents] = useState([]);
     const [duplicateWarning, setDuplicateWarning] = useState(null);
     const [aiClassifying, setAiClassifying] = useState(false);
+    const [scanning, setScanning] = useState(false);
+    const [activeAdvisories, setActiveAdvisories] = useState([]);
+    const [scheduleWarning, setScheduleWarning] = useState(null);
 
     useEffect(() => {
         if (!isAuthenticated()) {
@@ -58,7 +65,20 @@ export default function ReportIncident() {
         const currentUser = getCurrentUser();
         setUser(currentUser);
         fetchExistingIncidents();
+        fetchActiveAdvisories();
     }, [navigate]);
+
+    const fetchActiveAdvisories = async () => {
+        try {
+            const { data } = await supabase
+                .from('announcements')
+                .select('*')
+                .eq('is_active', true);
+            if (data) setActiveAdvisories(data);
+        } catch (err) {
+            console.error("Error fetching advisories:", err);
+        }
+    };
 
     const fetchExistingIncidents = async () => {
         try {
@@ -66,7 +86,7 @@ export default function ReportIncident() {
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
             const { data } = await supabase
                 .from('incidents')
-                .select('id, type, location, description, latitude, longitude, status, created_at')
+                .select('id, type, location, description, latitude, longitude, status, created_at, image_hash')
                 .neq('status', 'Resolved')
                 .gte('created_at', twentyFourHoursAgo)
                 .order('created_at', { ascending: false });
@@ -113,11 +133,30 @@ export default function ReportIncident() {
             // 1. Auto-classify type and severity
             const classification = await classifyIncidentText(text);
             if (classification) {
-                setFormData(prev => ({
-                    ...prev,
-                    type: classification.type,
-                    severity: classification.severity
-                }));
+                setFormData(prev => {
+                    const newType = classification.type;
+                    
+                    // Check integration schedule
+                    if (newType === 'No Water' || newType === 'Low Pressure') {
+                        const relatedAdvisory = activeAdvisories.find(a => 
+                            a.location && formData.location && 
+                            (formData.location.toLowerCase().includes(a.location.toLowerCase()) || a.location.toLowerCase().includes('all'))
+                        );
+                        if (relatedAdvisory) {
+                            setScheduleWarning(`Notice: There is currently a scheduled ${relatedAdvisory.type} in your area (${relatedAdvisory.location}). This may be the cause of your issue.`);
+                        } else {
+                            setScheduleWarning(null);
+                        }
+                    } else {
+                        setScheduleWarning(null);
+                    }
+
+                    return {
+                        ...prev,
+                        type: newType,
+                        severity: classification.severity
+                    };
+                });
             }
 
             // 2. Check for duplicates if location is also set
@@ -135,10 +174,9 @@ export default function ReportIncident() {
             setAiClassifying(false);
         } else {
             setDuplicateWarning(null);
+            setScheduleWarning(null);
         }
     };
-
-    const [scanning, setScanning] = useState(false);
 
     /**
      * Real-Time AI Computer Vision Scan
@@ -206,70 +244,74 @@ export default function ReportIncident() {
      */
     const processImage = async (file) => {
         if (!file) return;
-
-        setImage(file);
-        const reader = new FileReader();
-
         setScanning(true);
-        setFeedback({ type: 'success', message: 'Smart CSM AI: Initializing Computer Vision... 🧠' });
+        setFeedback({ type: 'info', message: 'Aqua AI is currently scanning your image. Please wait...' });
 
-        reader.onloadend = async () => {
-            setImagePreview(reader.result);
+        // Compress Image efficiently
+        try {
+            const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true };
+            const compressedFile = await imageCompression(file, options);
+            setImage(compressedFile);
+        } catch (error) {
+            console.error("Compression error:", error);
+            setImage(file); // fallback
+        }
 
-            // Perform Real Vision Scan
-            const img = new Image();
-            img.src = reader.result;
-            img.onload = async () => {
-                const scanResult = await performRealAiScan(img);
+        const objectUrl = URL.createObjectURL(file);
+        setImagePreview(objectUrl);
 
-                if (!scanResult.isValid) {
-                    setFeedback({ type: 'error', message: scanResult.error });
-                    setImage(null);
-                    setImagePreview(null);
-                    setScanning(false);
-                    return;
+        // Perform Real Vision Scan
+        const img = new Image();
+        img.src = objectUrl;
+        img.onload = async () => {
+            const scanResult = await performRealAiScan(img);
+
+            if (!scanResult.isValid) {
+                setFeedback({ type: 'error', message: scanResult.error });
+                setImage(null);
+                setImagePreview(null);
+                URL.revokeObjectURL(objectUrl);
+                return;
+            }
+
+            // Genuine Analysis Result
+            setFeedback({ type: 'success', message: 'Vision Verified: Authenticating incident data... 🤖' });
+            try {
+                const result = await analyzeIncidentImage(file);
+
+                // If it's a "Road" or "Puddle", AI might categorize it better
+                let bestType = result.type;
+                if (scanResult.label.toLowerCase().includes('water') || scanResult.label.toLowerCase().includes('puddle')) {
+                    bestType = "Pipe Leakage";
                 }
 
-                // Genuine Analysis Result
-                setFeedback({ type: 'success', message: 'Vision Verified: Authenticating incident data... 🤖' });
-                try {
-                    const result = await analyzeIncidentImage(file);
+                setFormData(prev => ({
+                    ...prev,
+                    type: bestType,
+                    severity: result.severity,
+                    description: `AI Visual Core identified ${scanResult.label}. ${result.description}`
+                }));
 
-                    // If it's a "Road" or "Puddle", AI might categorize it better
-                    let bestType = result.type;
-                    if (scanResult.label.toLowerCase().includes('water') || scanResult.label.toLowerCase().includes('puddle')) {
-                        bestType = "Pipe Leakage";
+                setFeedback({ type: 'success', message: `AI Verified: ${bestType}` });
+
+                // Trigger duplicate check
+                if (formData.latitude && formData.longitude) {
+                    const dupeResult = await checkDuplicateIncident(result.description, formData.latitude, formData.longitude, existingIncidents);
+                    if (dupeResult.is_duplicate) {
+                        setDuplicateWarning({
+                            message: `AI found a similar report nearby (${Math.round(dupeResult.confidence * 100)}% match)`,
+                            match: dupeResult.match
+                        });
                     }
-
-                    setFormData(prev => ({
-                        ...prev,
-                        type: bestType,
-                        severity: result.severity,
-                        description: `AI Visual Core identified ${scanResult.label}. ${result.description}`
-                    }));
-
-                    setFeedback({ type: 'success', message: `AI Verified: ${bestType}` });
-
-                    // Trigger duplicate check
-                    if (formData.latitude && formData.longitude) {
-                        const dupeResult = await checkDuplicateIncident(result.description, formData.latitude, formData.longitude, existingIncidents);
-                        if (dupeResult.is_duplicate) {
-                            setDuplicateWarning({
-                                message: `AI found a similar report nearby (${Math.round(dupeResult.confidence * 100)}% match)`,
-                                match: dupeResult.match
-                            });
-                        }
-                    }
-                } catch (err) {
-                    console.error(err);
-                    setFeedback({ type: 'error', message: 'AI processing failed.' });
-                } finally {
-                    setScanning(false);
-                    setTimeout(() => setFeedback(null), 4000);
                 }
-            };
+            } catch (err) {
+                console.error(err);
+                setFeedback({ type: 'error', message: 'AI processing failed.' });
+            } finally {
+                setScanning(false);
+                setTimeout(() => setFeedback(null), 4000);
+            }
         };
-        reader.readAsDataURL(file);
     };
 
     const handleImageChange = (e) => {
@@ -316,21 +358,98 @@ export default function ReportIncident() {
         }
 
         try {
+            // Check for duplicate flag
+            let finalDescription = formData.description;
+            if (duplicateWarning) {
+                finalDescription = `[DUPLICATE of #${duplicateWarning.match.id}] ${finalDescription}`;
+                toast.error("Duplicate warning logged with submission.");
+            }
+
+            // Upload image to Supabase Storage if it exists
+            let evidence_url = null;
+            let image_hash = null;
+
+            if (image) {
+                // Generate SHA-256 hash of the image to check for exact duplicates
+                try {
+                    const arrayBuffer = await image.arrayBuffer();
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    image_hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+                    // Check if an incident with this exact image already exists
+                    if (existingIncidents.some(inc => inc.image_hash === image_hash)) {
+                        toast.error("This exact image has already been submitted in another report. Please upload a new image to avoid duplication.");
+                        setLoading(false);
+                        return;
+                    }
+                } catch (hashErr) {
+                    console.error("Hashing error:", hashErr);
+                }
+
+                try {
+                    const fileExt = image.name?.split('.').pop() || 'jpg';
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    const filePath = `${user.id}/${fileName}`;
+                    
+                    const { error: uploadError } = await supabase.storage.from('evidence').upload(filePath, image);
+                    
+                    if (uploadError) {
+                        console.error("Storage upload failed completely! Error details:", uploadError);
+                        throw new Error(`Image upload failed: ${uploadError.message}`);
+                    }
+                    
+                    const { data } = supabase.storage.from('evidence').getPublicUrl(filePath);
+                    evidence_url = data.publicUrl;
+                } catch (imgErr) {
+                    console.error("Image processing error:", imgErr);
+                    toast.error(imgErr.message || "Failed to upload image.");
+                    setLoading(false);
+                    return; // Stop submission if image fails
+                }
+            }
+
             const { error } = await supabase
                 .from('incidents')
                 .insert([
                     {
                         type: formData.type,
                         location: formData.location,
-                        description: formData.description,
+                        description: finalDescription,
                         severity: formData.severity,
                         user_id: user.id,
                         user_name: user.name, // Added for admin clarity
                         contact_number: formData.contact_number,
                         latitude: formData.latitude,
-                        longitude: formData.longitude
+                        longitude: formData.longitude,
+                        image_hash: image_hash, // Save hash to prevent future duplicates
+                        evidence_url: evidence_url // Reverted to evidence_url
                     }
                 ]);
+
+            if (error) throw error;
+
+            // Notify admins
+            try {
+                const { data: admins } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('role', 'admin');
+
+                if (admins && admins.length > 0) {
+                    const adminNotifications = admins.map(admin => ({
+                        user_id: admin.id,
+                        title: 'New Incident Reported',
+                        message: `${user.name} reported a ${formData.severity} priority ${formData.type} at ${formData.location}.`,
+                        type: 'alert',
+                        read: false,
+                        created_at: new Date().toISOString()
+                    }));
+                    await supabase.from('notifications').insert(adminNotifications);
+                }
+            } catch (notifErr) {
+                console.error("Failed to notify admins", notifErr);
+            }
 
             if (error) throw error;
 
@@ -349,7 +468,7 @@ export default function ReportIncident() {
             }, 3000);
         } catch (error) {
             console.error('Error submitting report:', error.message);
-            setFeedback({ type: 'error', message: 'Failed to submit report. Please try again.' });
+            setFeedback({ type: 'error', message: `Failed to submit report: ${error.message}` });
             setLoading(false);
         }
     };
@@ -366,46 +485,43 @@ export default function ReportIncident() {
                     setSearchQuery={setSearchQuery}
                     title={t('report_incident')}
                     subtitle={t('keep_services_running')}
-                    icon={<AlertTriangle size={28} />}
-                    iconBgColor="bg-gradient-to-br from-blue-600 to-indigo-600"
+                    icon={<AlertTriangle size={24} toggleSidebar={toggleSidebar}
+                    />}
                 />
 
                 {/* Feedback Message */}
                 {feedback && (
-                    <div className={`fixed top-24 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-xl font-bold text-sm shadow-2xl flex items-center gap-3 animate-slide-up ${feedback.type === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                        {feedback.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
+                    <div className={`fixed top-24 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm flex items-center gap-2 ${feedback.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                        {feedback.type === 'error' ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
                         {feedback.message}
-                        <button onClick={() => setFeedback(null)} className="ml-2 hover:bg-white/20 p-1 rounded-full"><ChevronDown size={12} className="rotate-180" /></button>
+                        <button onClick={() => setFeedback(null)} className="ml-2 hover:bg-black/5 p-1 rounded-full"><ChevronDown size={14} className="rotate-180" /></button>
                     </div>
                 )}
 
-                <div className="max-w-4xl">
+                <div className="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
                     {submitted ? (
-                        <div className="floating-card p-16 text-center animate-slide-up">
-                            <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-8 text-emerald-500 shadow-inner">
-                                <CheckCircle size={56} />
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-12 text-center">
+                            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600">
+                                <CheckCircle size={32} />
                             </div>
-                            <h3 className="text-3xl font-black text-slate-800 mb-3 tracking-tight">{t('success_ticket_created')}</h3>
-                            <p className="text-slate-500 mb-10 max-w-sm mx-auto font-medium">{t('report_logged_desc', { id: Date.now().toString().slice(-6) })}</p>
+                            <h3 className="text-xl font-semibold text-slate-900 mb-2">{t('success_ticket_created')}</h3>
+                            <p className="text-slate-500 mb-8 max-w-sm mx-auto">{t('report_logged_desc', { id: Date.now().toString().slice(-6) })}</p>
                             <button
                                 onClick={() => navigate('/dashboard')}
-                                className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm shadow-2xl hover:scale-105 active:scale-95 transition-all"
+                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium text-sm hover:bg-blue-700 transition-colors"
                             >
                                 {t('return_to_dashboard')}
                             </button>
                         </div>
                     ) : (
-                        <div className="floating-card p-10 overflow-hidden relative">
-                            {/* Decorative background blur */}
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
-
-                            <form onSubmit={handleSubmit} className="space-y-10 relative z-10">
-                                <div className="grid md:grid-cols-2 gap-10">
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('incident_category')}</label>
+                        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 md:p-8">
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t('incident_category')}</label>
                                         <div className="relative">
                                             <select
-                                                className="w-full h-16 pl-6 pr-12 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-blue-500 outline-none transition-all font-bold text-slate-700 appearance-none cursor-pointer"
+                                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors appearance-none cursor-pointer"
                                                 value={formData.type}
                                                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                             >
@@ -416,20 +532,20 @@ export default function ReportIncident() {
                                                 <option value="Broken Water Meter">{t('broken_meter')}</option>
                                                 <option value="Other / Maintenance">{t('other_maintenance')}</option>
                                             </select>
-                                            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
+                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                                         </div>
                                     </div>
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('severity_impact')}</label>
-                                        <div className="flex gap-3 h-16">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t('severity_impact')}</label>
+                                        <div className="flex gap-2">
                                             {['Low', 'Medium', 'High'].map((level) => (
                                                 <button
                                                     key={level}
                                                     type="button"
                                                     onClick={() => setFormData({ ...formData, severity: level })}
-                                                    className={`flex-1 rounded-2xl font-black text-sm transition-all border ${formData.severity === level
-                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-500/30 ring-4 ring-blue-500/10'
-                                                        : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'
+                                                    className={`flex-1 py-2.5 rounded-xl font-medium text-sm transition-colors border ${formData.severity === level
+                                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                                                         }`}
                                                 >
                                                     {t(level.toLowerCase())}
@@ -439,43 +555,56 @@ export default function ReportIncident() {
                                     </div>
                                 </div>
 
-                                <div className="grid md:grid-cols-2 gap-10">
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('location_identity')}</label>
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t('location_identity')}</label>
                                         <div className="relative">
                                             <input
                                                 type="text"
                                                 required
                                                 placeholder={t('area_placeholder')}
-                                                className="w-full h-16 pl-6 pr-16 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-blue-500 outline-none transition-all font-bold text-slate-700"
+                                                className="w-full border border-slate-200 rounded-xl pl-4 pr-12 py-2.5 bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
                                                 value={formData.location}
                                                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                             />
                                             <button
                                                 type="button"
                                                 onClick={trackLocation}
-                                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-xl ${formData.latitude ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white'} shadow-lg hover:scale-110 active:scale-95 transition-all`}
+                                                className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg ${formData.latitude ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'} transition-colors`}
+                                                title="Detect Location"
                                             >
-                                                {detecting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Droplet size={18} />}
+                                                {detecting ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div> : <Droplet size={16} />}
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('contact_number')}</label>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">{t('contact_number')}</label>
                                         <input
                                             type="tel"
                                             required
                                             placeholder={t('contact_placeholder')}
-                                            className="w-full h-16 px-6 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-blue-500 outline-none transition-all font-bold text-slate-700"
+                                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
                                             value={formData.contact_number}
                                             onChange={(e) => setFormData({ ...formData, contact_number: e.target.value })}
                                         />
                                     </div>
                                 </div>
+                                
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-slate-700">{t('specific_address', 'Specific Address / Landmark')}</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="e.g. Near the old mango tree, Block 4"
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
+                                        value={formData.address_details}
+                                        onChange={(e) => setFormData({ ...formData, address_details: e.target.value })}
+                                    />
+                                </div>
 
                                 {/* Image Upload Section */}
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{t('evidence_photo')}</label>
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-slate-700">{t('evidence_photo')}</label>
                                     <div className="relative">
                                         <input
                                             type="file"
@@ -487,31 +616,12 @@ export default function ReportIncident() {
                                         />
                                         <label
                                             htmlFor="evidence-upload"
-                                            className={`w-full h-[350px] md:h-[450px] p-2 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden group/upload ${imagePreview ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300'
+                                            className={`w-full h-48 md:h-64 p-4 rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-colors overflow-hidden group ${imagePreview ? 'border-blue-300 bg-blue-50/30' : 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300'
                                                 }`}
                                         >
                                             {imagePreview ? (
-                                                <div className="relative w-full h-full">
-                                                    <img src={imagePreview} alt="Preview" className={`w-full h-full object-contain rounded-2xl transition-all duration-700 ${scanning ? 'brightness-[0.4] contrast-125 saturate-0' : 'brightness-100'}`} />
-
-                                                    {/* AI Scanning HUD Overlay */}
-                                                    {scanning && (
-                                                        <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-                                                            <div className="w-full h-1 bg-blue-400/80 absolute top-0 left-0 shadow-[0_0_20px_#60a5fa] animate-scan-line"></div>
-                                                            <div className="flex flex-col items-center gap-4">
-                                                                <div className="w-16 h-16 border-t-4 border-r-4 border-blue-500 rounded-full animate-spin"></div>
-                                                                <div className="px-4 py-2 bg-blue-500/20 backdrop-blur-md rounded-full border border-blue-500/30 text-blue-400 font-black text-[10px] uppercase tracking-[0.3em] animate-pulse">
-                                                                    {t('ai_analyzing')}
-                                                                </div>
-                                                            </div>
-
-                                                            {/* HUD Corners */}
-                                                            <div className="absolute top-6 left-6 w-4 h-4 border-t-2 border-l-2 border-blue-400/50"></div>
-                                                            <div className="absolute top-6 right-6 w-4 h-4 border-t-2 border-r-2 border-blue-400/50"></div>
-                                                            <div className="absolute bottom-6 left-6 w-4 h-4 border-b-2 border-l-2 border-blue-400/50"></div>
-                                                            <div className="absolute bottom-6 right-6 w-4 h-4 border-b-2 border-r-2 border-blue-400/50"></div>
-                                                        </div>
-                                                    )}
+                                                <div className="relative w-full h-full flex items-center justify-center">
+                                                    <img src={imagePreview} alt="Preview" className="max-w-full max-h-full object-contain rounded-lg transition-opacity duration-300 opacity-100" />
 
                                                     <button
                                                         type="button"
@@ -521,19 +631,19 @@ export default function ReportIncident() {
                                                             setImage(null);
                                                             setImagePreview(null);
                                                         }}
-                                                        className="absolute top-6 right-6 p-3 bg-rose-500 text-white rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all z-20"
+                                                        className="absolute top-2 right-2 p-1.5 bg-white text-rose-600 rounded-lg shadow-sm border border-slate-200 hover:bg-rose-50 transition-colors z-20"
                                                     >
-                                                        <Trash2 size={18} />
+                                                        <Trash2 size={16} />
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <div className="flex flex-col items-center gap-4 text-slate-400">
-                                                    <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform text-blue-500">
-                                                        <Sparkles size={28} />
+                                                <div className="flex flex-col items-center gap-2 text-slate-500">
+                                                    <div className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-sm text-blue-500">
+                                                        <Sparkles size={20} />
                                                     </div>
                                                     <div className="text-center">
-                                                        <p className="font-black text-slate-800 text-sm uppercase tracking-widest">{t('snap_evidence')}</p>
-                                                        <p className="text-[10px] font-bold text-slate-400">{t('aqua_vision_enabled')}</p>
+                                                        <p className="font-medium text-sm text-slate-700">{t('snap_evidence')}</p>
+                                                        <p className="text-xs text-slate-500">{t('aqua_vision_enabled')}</p>
                                                     </div>
                                                 </div>
                                             )}
@@ -541,18 +651,18 @@ export default function ReportIncident() {
                                     </div>
 
                                     {/* Send to Admin Button - Only shows when image is previewed */}
-                                    {imagePreview && !scanning && (
+                                    {imagePreview && (
                                         <div className="flex justify-end mt-2">
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.preventDefault();
-                                                    setFeedback({ type: 'success', message: 'Forwarding Aqua\'s analysis and photo to Admin... 📤' });
+                                                    setFeedback({ type: 'success', message: 'Forwarding analysis to Admin...' });
                                                     setTimeout(() => {
-                                                        navigate('/messages', { state: { initialMsg: `Hi Admin, Aqua analyzed my photo: ${formData.description}. Can you help?` } });
+                                                        navigate('/messages', { state: { initialMsg: `Hi Admin, analyzed my photo: ${formData.description}. Can you help?` } });
                                                     }, 1500);
                                                 }}
-                                                className="px-5 py-2.5 bg-slate-800 text-white rounded-[14px] font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+                                                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-medium text-xs hover:bg-slate-50 transition-colors flex items-center gap-1.5"
                                             >
                                                 <MessageSquare size={14} /> {t('send_photo_admin')}
                                             </button>
@@ -560,18 +670,28 @@ export default function ReportIncident() {
                                     )}
                                 </div>
 
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center ml-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{t('context_description')}</label>
-                                        {aiClassifying && <span className="text-[9px] font-black text-blue-500 animate-pulse uppercase tracking-widest">{t('ai_categorizing')}</span>}
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <label className="block text-sm font-medium text-slate-700">{t('context_description')}</label>
+                                        {aiClassifying && <span className="text-xs font-medium text-blue-600">{t('ai_categorizing')}</span>}
                                     </div>
 
                                     {duplicateWarning && (
-                                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 animate-shake mb-4">
-                                            <AlertTriangle className="text-amber-500 shrink-0" size={18} />
+                                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 mb-3">
+                                            <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={16} />
                                             <div>
-                                                <p className="text-xs font-black text-amber-800 uppercase tracking-tight">{t('possible_duplicate')}</p>
-                                                <p className="text-xs text-amber-700 font-medium leading-relaxed mt-0.5">{duplicateWarning.message}</p>
+                                                <p className="text-sm font-medium text-amber-800">{t('possible_duplicate')}</p>
+                                                <p className="text-xs text-amber-700 mt-0.5">{duplicateWarning.message}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {scheduleWarning && (
+                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2 mb-3">
+                                            <Info className="text-blue-500 shrink-0 mt-0.5" size={16} />
+                                            <div>
+                                                <p className="text-sm font-medium text-blue-800">Scheduled Integration Notice</p>
+                                                <p className="text-xs text-blue-700 mt-0.5">{scheduleWarning}</p>
                                             </div>
                                         </div>
                                     )}
@@ -580,30 +700,30 @@ export default function ReportIncident() {
                                         required
                                         rows={4}
                                         placeholder={t('description_placeholder')}
-                                        className={`w-full p-6 rounded-3xl bg-slate-50 border outline-none transition-all font-bold text-slate-700 resize-none ${duplicateWarning ? 'border-amber-300 focus:border-amber-500' : 'border-slate-100 focus:bg-white focus:border-blue-500'}`}
+                                        className={`w-full border rounded-xl px-4 py-3 bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors resize-none ${duplicateWarning ? 'border-amber-300 focus:border-amber-500' : 'border-slate-200'}`}
                                         value={formData.description}
                                         onChange={handleDescriptionChange}
                                     ></textarea>
                                 </div>
 
-                                <div className="pt-4 flex items-center justify-between gap-6">
+                                <div className="pt-4 flex items-center justify-end gap-4 border-t border-slate-100">
                                     <button
                                         type="button"
                                         onClick={() => navigate('/dashboard')}
-                                        className="px-8 py-5 text-slate-400 font-black text-sm uppercase tracking-widest hover:text-slate-600 transition-all"
+                                        className="px-4 py-2.5 text-slate-600 font-medium text-sm hover:text-slate-900 transition-colors"
                                     >
                                         {t('discard')}
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={loading}
-                                        className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-[24px] py-5 font-black text-sm uppercase tracking-widest shadow-2xl shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-4"
+                                        className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                                     >
                                         {loading ? (
-                                            <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                                         ) : (
                                             <>
-                                                <Send size={18} />
+                                                <Send size={16} />
                                                 {t('submit_full_report')}
                                             </>
                                         )}
@@ -615,13 +735,13 @@ export default function ReportIncident() {
 
                     {/* Quick Guidance Alert */}
                     {!submitted && (
-                        <div className="mt-8 p-8 rounded-[32px] bg-slate-100/50 backdrop-blur-sm border border-white flex items-center gap-6 group hover:bg-white hover:shadow-xl transition-all duration-500">
-                            <div className="p-4 bg-white rounded-2xl text-blue-600 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                <AlertTriangle size={24} />
+                        <div className="mt-6 p-4 rounded-xl bg-white border border-slate-200 shadow-sm flex items-start gap-3">
+                            <div className="p-2 bg-blue-50 rounded-lg text-blue-600 shrink-0">
+                                <AlertTriangle size={18} />
                             </div>
                             <div>
-                                <h4 className="font-black text-slate-800 text-sm uppercase tracking-tight">{t('emergency_protocol')}</h4>
-                                <p className="text-sm text-slate-500 font-medium leading-relaxed">{t('immediate_contact_hotline')}</p>
+                                <h4 className="font-medium text-slate-900 text-sm">{t('emergency_protocol')}</h4>
+                                <p className="text-sm text-slate-500 mt-0.5">{t('immediate_contact_hotline')}</p>
                             </div>
                         </div>
                     )}

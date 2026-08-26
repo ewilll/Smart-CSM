@@ -80,6 +80,13 @@ export const registerUser = async (userData) => {
  */
 export const loginUser = async (email, password) => {
     try {
+        // Prevent double login state conflicts by ensuring any existing session is cleared first
+        const { data: existingSession } = await supabase.auth.getSession();
+        if (existingSession?.session) {
+            await supabase.auth.signOut();
+            localStorage.removeItem('smart_csm_current_user');
+        }
+
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
             email,
             password,
@@ -146,6 +153,7 @@ export const logoutUser = async () => {
     localStorage.removeItem('smart_csm_current_user');
     localStorage.removeItem('smart_csm_auth_intent');
     localStorage.removeItem('smart_csm_pending_role');
+    sessionStorage.removeItem('smart_csm_ai_chat_history');
 };
 
 /**

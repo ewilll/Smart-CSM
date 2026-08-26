@@ -115,7 +115,10 @@ const AquaMascot = ({ isOpen, setIsOpen, dragRef, mascotName }) => {
 export default function Chatbot() {
     const [isOpen, setIsOpen] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false); // New State for Expand/Minimize
-    const [messages, setMessages] = useState([]);
+    const [messages, setMessages] = useState(() => {
+        const saved = sessionStorage.getItem('smart_csm_ai_chat_history');
+        return saved ? JSON.parse(saved) : [];
+    });
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [aiConfig, setAiConfig] = useState({
@@ -136,11 +139,12 @@ export default function Chatbot() {
     const isExcluded = excludedPages.includes(location.pathname);
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     };
 
     useEffect(() => {
         scrollToBottom();
+        sessionStorage.setItem('smart_csm_ai_chat_history', JSON.stringify(messages));
     }, [messages]);
 
     useEffect(() => {
@@ -152,23 +156,11 @@ export default function Chatbot() {
                     .eq('key', 'ai_config')
                     .single();
 
-                const isGuest = !currentUser;
-                const guestWelcome = "Hello! I am Aqua, your exclusive PrimeWater customer care AI. I see you are browsing as a guest. How can I help you today? Please log in to fully use the system and allow me to assist you better!";
-
                 if (data?.value) {
                     setAiConfig(data.value);
-                    const defaultWelcome = data.value.welcomeMessage || 'Hello! I am Aqua, your PrimeWater assistant. How can I help you manage your water services today?';
-                    setMessages([{ role: 'assistant', content: isGuest ? guestWelcome : defaultWelcome }]);
-                } else {
-                    const fallbackWelcome = 'Hello! I am Aqua, your PrimeWater assistant. How can I help you manage your water services today?';
-                    setMessages([{ role: 'assistant', content: isGuest ? guestWelcome : fallbackWelcome }]);
                 }
             } catch (err) {
                 console.error('Error fetching AI config:', err);
-                const isGuest = !currentUser;
-                const guestWelcome = "Hello! I am Aqua, your exclusive PrimeWater customer care AI. I see you are browsing as a guest. How can I help you today? Please log in to fully use the system and allow me to assist you better!";
-                const fallbackWelcome = 'Hello! I am Aqua, your PrimeWater assistant. How can I help you manage your water services today?';
-                setMessages([{ role: 'assistant', content: isGuest ? guestWelcome : fallbackWelcome }]);
             }
         };
 
@@ -289,7 +281,7 @@ export default function Chatbot() {
             {/* Full screen constraints container - invisible */}
             <div ref={constraintsRef} className="fixed inset-0 pointer-events-none z-[9999]" />
 
-            <div className={`fixed z-[10000] pointer-events-none flex flex-col transition-all duration-300 ${(isOpen && isExpanded) ? 'inset-0 items-center justify-center bg-slate-900/50 backdrop-blur-sm' : 'bottom-10 right-10 items-end'}`}>
+            <div className={`fixed z-[10000] pointer-events-none flex flex-col transition-all duration-300 ${(isOpen && isExpanded) ? 'inset-0 items-center justify-center bg-slate-900/50 backdrop-blur-sm' : 'bottom-24 right-4 md:bottom-10 md:right-10 items-end'}`}>
                 <AnimatePresence>
                     {isOpen && (
                         <motion.div
@@ -435,14 +427,14 @@ export default function Chatbot() {
                                         onChange={(e) => setInput(e.target.value)}
                                         placeholder={aiConfig.isMaintenance ? "AI is currently offline for maintenance..." : "Ask Aqua anything..."}
                                         disabled={aiConfig.isMaintenance || loading}
-                                        className="w-full bg-slate-100 border-none rounded-[24px] py-4.5 pl-7 pr-16 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-600/10 focus:bg-white transition-all outline-none shadow-inner disabled:opacity-50"
+                                        className="w-full bg-slate-100 border-none rounded-[32px] py-4 pl-7 pr-16 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-600/10 focus:bg-white transition-all outline-none shadow-inner disabled:opacity-50"
                                     />
                                     <button
                                         type="submit"
                                         disabled={loading || !input.trim() || aiConfig.isMaintenance}
-                                        className="absolute right-2 top-2 w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-500/20 hover:scale-110 active:scale-90 disabled:opacity-50 disabled:transform-none transition-all"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xl shadow-blue-500/20 hover:scale-110 active:scale-90 disabled:opacity-50 disabled:transform-none transition-all"
                                     >
-                                        <Send className="w-5 h-5 pointer-events-none" />
+                                        <Send className="w-4 h-4 pointer-events-none" />
                                     </button>
                                 </div>
                                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -468,9 +460,12 @@ export default function Chatbot() {
                                         🚫 No Water
                                     </button>
                                 </div>
-                                <div className="mt-4 flex items-center justify-center gap-2">
-                                    <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-                                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Gemini AI Supported</span>
+                                <div className="mt-4 flex flex-col items-center justify-center gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+                                        <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Powered by Gemini API</span>
+                                    </div>
+                                    <span className="text-[8px] text-slate-300 font-medium">Responses are generated by Google's Gemini Model via API</span>
                                 </div>
                             </form>
                         </motion.div>
