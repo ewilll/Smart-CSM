@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from './supabaseClient';
 import { getCurrentUser } from './auth';
 
-const AI_SERVER_URL = "http://localhost:8000";
+const AI_SERVER_URL = "https://smart-csm.onrender.com";
 const AI_SECRET_KEY = "csm_secure_ai_access_2024";
 
 // Initialize Gemini API
